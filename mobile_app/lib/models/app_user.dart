@@ -1,43 +1,230 @@
-/// Represents an authenticated user in our app's domain.
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+/// The role assigned to a user.
 ///
-/// This is intentionally DECOUPLED from Firebase's `User` class. By wrapping
-/// Firebase's user in our own class, our UI never imports firebase_auth
-/// directly — it only imports AppUser. If we ever swap auth providers,
-/// only AuthService needs to change, not every screen.
+/// THREAT MODEL NOTE:
+/// - Role strings are referenced by Firestore security rules. Renaming
+///   them requires a data migration AND a rules update, in lockstep.
+/// - `resident` and `public` are the only roles a signup flow can
+///   produce. `admin` and `staff` are out-of-band provisioned (Firebase
+///   console or privileged server script), never via client code.
+enum UserRole {
+  admin,
+  staff,
+  resident,
+  public;
+
+  String toFirestoreValue() => name;
+
+  static UserRole fromFirestoreValue(String value) {
+    return UserRole.values.firstWhere(
+      (r) => r.name == value,
+      orElse: () => throw ArgumentError('Unknown UserRole: "$value"'),
+    );
+  }
+}
+
+/// The account lifecycle status. Decoupled from role so an admin can
+/// suspend a user without changing what they are.
 ///
-/// This is also where we'll later add fields that Firebase Auth doesn't
-/// natively store, such as role ('resident' | 'admin' | 'staff' | 'visitor')
-/// which lives in Firestore. For Day 2, we keep it minimal — just the
-/// authentication identity. Profile fields get layered in during Sprint 2.
+/// Lifecycle:
+///   pendingApproval → active  (admin approved residency claim)
+///   pendingApproval → active  (admin rejected; role also flips to public)
+///   active          → suspended (admin suspends, e.g. for abuse or move-out)
+///
+/// There is no transition FROM suspended back to active by the client.
+/// That requires admin action (future sprint).
+enum UserStatus {
+  pendingApproval,
+  active,
+  suspended;
+
+  String toFirestoreValue() {
+    switch (this) {
+      case UserStatus.pendingApproval:
+        return 'pending_approval';
+      case UserStatus.active:
+        return 'active';
+      case UserStatus.suspended:
+        return 'suspended';
+    }
+  }
+
+  static UserStatus fromFirestoreValue(String value) {
+    switch (value) {
+      case 'pending_approval':
+        return UserStatus.pendingApproval;
+      case 'active':
+        return UserStatus.active;
+      case 'suspended':
+        return UserStatus.suspended;
+      default:
+        throw ArgumentError('Unknown UserStatus: "$value"');
+    }
+  }
+}
+
+/// Domain representation of a user in the residential management system.
+///
+/// This is the Firestore-backed profile at /users/{uid}, NOT the Firebase
+/// Auth user. The Firebase Auth UID is the link between them.
+///
+/// KEY FIELDS FOR SECURITY:
+///   - requestedUnit: a CLAIM made at signup, not a fact. Never grants
+///     privileges on its own.
+///   - unitNumber: the VERIFIED unit. Only set after admin approval.
+///     Grants unit-scoped privileges (visitor registration, maintenance
+///     requests, unit-targeted announcements).
 class AppUser {
-  /// Firebase's unique user ID (UID). Stable for the lifetime of the account.
-  /// We use this as the primary key in Firestore /users/{uid} documents.
   final String uid;
-
-  /// User's email address. Guaranteed non-null because we require
-  /// email/password signup in this project.
   final String email;
+  final String name;
+  final UserRole role;
+  final UserStatus status;
 
-  /// Display name (e.g., "Jack Puan"). May be null immediately after signup
-  /// before the user completes their profile. We enforce it in the signup
-  /// flow by calling updateDisplayName() right after account creation.
-  final String? displayName;
+  /// The unit this user CLAIMS to occupy, pending admin verification.
+  /// Shown to admins on the approval dashboard. Cleared on approval
+  /// (where its value migrates to unitNumber) or rejection (where it
+  /// is discarded).
+  final String? requestedUnit;
 
-  /// Whether the user has verified their email via the verification link
-  /// that Firebase sends on signup. Critical for MFA — users cannot enroll
-  /// in MFA until their email is verified. Also used to gate access to
-  /// sensitive features.
-  final bool emailVerified;
+  /// The VERIFIED unit occupied by this user. Only set by admin approval.
+  /// Absence of this field means no unit-scoped access, regardless of role.
+  final String? unitNumber;
+
+  final String? phoneNumber;
+
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? approvedAt;
+  final String? approvedBy;
+
+  /// If the admin REJECTED a residency claim, this records who and when.
+  /// Separate from approvedAt/approvedBy so the audit trail distinguishes
+  /// between "approved as resident" and "rejected, downgraded to public."
+  final DateTime? rejectedAt;
+  final String? rejectedBy;
+
+  final bool mfaEnrolled;
+  final List<String> fcmTokens;
 
   const AppUser({
     required this.uid,
     required this.email,
-    required this.emailVerified,
-    this.displayName,
+    required this.name,
+    required this.role,
+    required this.status,
+    this.requestedUnit,
+    this.unitNumber,
+    this.phoneNumber,
+    required this.createdAt,
+    required this.updatedAt,
+    this.approvedAt,
+    this.approvedBy,
+    this.rejectedAt,
+    this.rejectedBy,
+    this.mfaEnrolled = false,
+    this.fcmTokens = const [],
   });
 
-  /// Debugging convenience. Never log this in production — contains PII.
+  factory AppUser.fromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+    SnapshotOptions? options,
+  ) {
+    final data = snapshot.data();
+    if (data == null) {
+      throw StateError('User document "${snapshot.id}" has no data');
+    }
+
+    return AppUser(
+      uid: snapshot.id,
+      email: data['email'] as String,
+      name: data['name'] as String,
+      role: UserRole.fromFirestoreValue(data['role'] as String),
+      status: UserStatus.fromFirestoreValue(data['status'] as String),
+      requestedUnit: data['requestedUnit'] as String?,
+      unitNumber: data['unitNumber'] as String?,
+      phoneNumber: data['phoneNumber'] as String?,
+      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
+      approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
+      approvedBy: data['approvedBy'] as String?,
+      rejectedAt: (data['rejectedAt'] as Timestamp?)?.toDate(),
+      rejectedBy: data['rejectedBy'] as String?,
+      mfaEnrolled: data['mfaEnrolled'] as bool? ?? false,
+      fcmTokens:
+          (data['fcmTokens'] as List<dynamic>?)?.cast<String>() ?? const [],
+    );
+  }
+
+  Map<String, dynamic> toFirestore() {
+    return {
+      'uid': uid,
+      'email': email,
+      'name': name,
+      'role': role.toFirestoreValue(),
+      'status': status.toFirestoreValue(),
+      'requestedUnit': requestedUnit,
+      'unitNumber': unitNumber,
+      'phoneNumber': phoneNumber,
+      'createdAt': Timestamp.fromDate(createdAt),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'approvedAt':
+          approvedAt != null ? Timestamp.fromDate(approvedAt!) : null,
+      'approvedBy': approvedBy,
+      'rejectedAt':
+          rejectedAt != null ? Timestamp.fromDate(rejectedAt!) : null,
+      'rejectedBy': rejectedBy,
+      'mfaEnrolled': mfaEnrolled,
+      'fcmTokens': fcmTokens,
+    };
+  }
+
+  AppUser copyWith({
+    String? email,
+    String? name,
+    UserRole? role,
+    UserStatus? status,
+    String? requestedUnit,
+    String? unitNumber,
+    String? phoneNumber,
+    DateTime? updatedAt,
+    DateTime? approvedAt,
+    String? approvedBy,
+    DateTime? rejectedAt,
+    String? rejectedBy,
+    bool? mfaEnrolled,
+    List<String>? fcmTokens,
+  }) {
+    return AppUser(
+      uid: uid,
+      email: email ?? this.email,
+      name: name ?? this.name,
+      role: role ?? this.role,
+      status: status ?? this.status,
+      requestedUnit: requestedUnit ?? this.requestedUnit,
+      unitNumber: unitNumber ?? this.unitNumber,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      approvedAt: approvedAt ?? this.approvedAt,
+      approvedBy: approvedBy ?? this.approvedBy,
+      rejectedAt: rejectedAt ?? this.rejectedAt,
+      rejectedBy: rejectedBy ?? this.rejectedBy,
+      mfaEnrolled: mfaEnrolled ?? this.mfaEnrolled,
+      fcmTokens: fcmTokens ?? this.fcmTokens,
+    );
+  }
+
+  /// Convenience: is this user a VERIFIED resident with unit-scoped access?
+  /// Use this in UI code instead of manually checking role + status + unitNumber.
+  bool get isVerifiedResident =>
+      role == UserRole.resident &&
+      status == UserStatus.active &&
+      unitNumber != null;
+
   @override
   String toString() =>
-      'AppUser(uid: $uid, email: $email, verified: $emailVerified)';
+      'AppUser(uid: $uid, email: $email, role: ${role.name}, '
+      'status: ${status.name}, unitNumber: $unitNumber)';
 }
