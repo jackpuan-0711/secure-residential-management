@@ -1,23 +1,22 @@
 import 'package:flutter/material.dart';
-import '../models/auth_identity.dart';
+import '../models/app_user.dart';
 import '../services/auth_service.dart';
 
-/// Home screen — shown after successful authentication AND email verification.
+/// Home screen — shown after successful authentication, email verification,
+/// and profile completion (status=active).
 ///
-/// ─── TRANSITIONAL WIDGET (Sprint 2, Step 1.5) ────────────────────
-/// This screen currently takes an `AuthIdentity` (Firebase Auth data
-/// only). It displays the Firebase Auth `displayName` and a
-/// verification chip, serving as the "signed-in landing" so the app
-/// compiles and the post-verification flow can be smoke-tested.
+/// ─── Step 6 update ───────────────────────────────────────────────
+/// Takes AppUser (Firestore-backed domain model) instead of AuthIdentity.
+/// Displays role and status so the router wiring can be visually verified
+/// during the demo.
 ///
-/// In Sprint 2, Step 6, this widget will be replaced with a role-aware
-/// dashboard that takes an `AppUser` loaded from Firestore.
+/// Step 7 will split this into role-specific dashboards
+/// (ResidentHome, AdminHome, PublicHome).
 /// ──────────────────────────────────────────────────────────────────
 class HomeScreen extends StatelessWidget {
-  /// The current authenticated session''s Firebase Auth identity.
-  final AuthIdentity identity;
+  final AppUser user;
 
-  const HomeScreen({super.key, required this.identity});
+  const HomeScreen({super.key, required this.user});
 
   Future<void> _handleLogout(BuildContext context) async {
     final confirmed = await showDialog<bool>(
@@ -45,9 +44,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final displayName = identity.displayName?.isNotEmpty == true
-        ? identity.displayName!
-        : 'Resident';
+    final displayName = user.name.isNotEmpty ? user.name : 'Resident';
 
     return Scaffold(
       appBar: AppBar(
@@ -117,32 +114,35 @@ class HomeScreen extends StatelessWidget {
                       _InfoRow(
                         icon: Icons.email_outlined,
                         label: 'Email',
-                        value: identity.email,
-                        trailing: identity.emailVerified
-                            ? const Chip(
-                                label: Text('Verified'),
-                                avatar: Icon(
-                                  Icons.check_circle,
-                                  color: Colors.green,
-                                  size: 18,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              )
-                            : const Chip(
-                                label: Text('Unverified'),
-                                avatar: Icon(
-                                  Icons.warning_amber,
-                                  color: Colors.orange,
-                                  size: 18,
-                                ),
-                                visualDensity: VisualDensity.compact,
-                              ),
+                        value: user.email,
+                        // Email is always verified by the time AuthGate routes here.
+                        trailing: const Chip(
+                          label: Text('Verified'),
+                          avatar: Icon(
+                            Icons.check_circle,
+                            color: Colors.green,
+                            size: 18,
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
                       ),
                       const Divider(),
                       _InfoRow(
                         icon: Icons.fingerprint,
                         label: 'User ID',
-                        value: identity.uid,
+                        value: user.uid,
+                      ),
+                      const Divider(),
+                      _InfoRow(
+                        icon: Icons.badge_outlined,
+                        label: 'Role',
+                        value: user.role.name,
+                      ),
+                      const Divider(),
+                      _InfoRow(
+                        icon: Icons.check_circle_outline,
+                        label: 'Status',
+                        value: user.status.name,
                       ),
                     ],
                   ),

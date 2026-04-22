@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
+import 'models/app_user.dart';
 import 'models/auth_identity.dart';
 import 'services/auth_service.dart';
+import 'services/user_repository.dart';
 import 'screens/login_screen.dart';
 import 'screens/email_verification_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/complete_profile_screen.dart';
+import 'screens/awaiting_approval_screen.dart';
 
 /// Entry point of the Residential Management mobile app.
 ///
@@ -44,61 +48,138 @@ class ResidentialApp extends StatelessWidget {
 
 /// AuthGate is the central routing widget.
 ///
-/// It subscribes to AuthService.authStateChanges (emitting AuthIdentity?)
-/// and decides which screen to show based on the current auth state.
+/// ─── Router state machine (Sprint 2, Step 6) ────────────────────
+/// The router listens to TWO streams:
+///   1. Firebase Auth state (via AuthService.authStateChanges)
+///   2. Firestore /users/{uid} doc (via UserRepository.watchUserProfile)
 ///
-/// ─── Current routing (post Sprint 2, Step 1.5) ──────────────────────
-///   - Loading (initial snapshot)     → SplashScreen
-///   - Signed out (identity == null)  → LoginScreen
-///   - Signed in + email NOT verified → EmailVerificationScreen
-///   - Signed in + verified           → HomeScreen (transitional)
+/// The second stream is only subscribed when (1) reports a verified user.
+/// This nested-StreamBuilder pattern guarantees:
+///   - Logged-out users never trigger a Firestore read
+///   - Firestore listener is torn down automatically on sign-out
 ///
-/// ─── Future routing (Sprint 2, Steps 4b–7) ──────────────────────────
-/// Once CompleteProfileScreen and role-based dashboards land, the
-/// verified branch will split into six states driven by the user's
-/// Firestore /users/{uid} document:
-///   - No profile doc                  → CompleteProfileScreen
-///   - status: pending_approval        → AwaitingApprovalScreen
-///   - status: active, role: resident  → ResidentHome
-///   - status: active, role: public    → PublicHome
-///   - status: active, role: admin     → AdminHome
-///   - status: suspended               → SuspendedScreen
+/// ─── State routing table ────────────────────────────────────────
+///   auth=null                                → LoginScreen
+///   auth=user, verified=false                → EmailVerificationScreen
+///   auth=user, verified=true, profile=null   → CompleteProfileScreen
+///   profile.status=pendingApproval           → AwaitingApprovalScreen
+///   profile.status=suspended                 → SuspendedScreen (placeholder)
+///   profile.status=active, role=resident     → HomeScreen (AppUser)
+///   profile.status=active, role=public       → HomeScreen (AppUser)
+///   profile.status=active, role=admin        → HomeScreen (AppUser)
+///   profile.status=active, role=staff        → HomeScreen (AppUser)
 ///
-/// This widget is the ONLY place in the app that decides "where should
-/// the user be?" — all screens are "dumb" and just react.
+/// Role-specific dashboards (ResidentHome, AdminHome, etc.) are Step 7.
+/// For now all active users land on the transitional HomeScreen, which
+/// accepts an AppUser and displays role/status in the UI for verification.
+/// ────────────────────────────────────────────────────────────────
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
   Widget build(BuildContext context) {
     final authService = AuthService();
+    final userRepository = UserRepository();
 
     return StreamBuilder<AuthIdentity?>(
       stream: authService.authStateChanges,
-      builder: (context, snapshot) {
-        // ── State 1: Waiting for Firebase to report initial auth state ──
-        if (snapshot.connectionState == ConnectionState.waiting) {
+      builder: (context, authSnapshot) {
+        // ── Waiting for initial auth state ──
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
         }
 
-        final identity = snapshot.data;
+        final identity = authSnapshot.data;
 
-        // ── State 2: No user signed in → Login ──
+        // ── No user signed in ──
         if (identity == null) {
           return const LoginScreen();
         }
 
-        // ── State 3: Signed in but email NOT verified → verification ──
+        // ── Signed in but email not verified ──
         if (!identity.emailVerified) {
           return const EmailVerificationScreen();
         }
 
-        // ── State 4: Signed in AND verified → Home (transitional) ──
-        // Step 6 replaces this branch with a Firestore-backed loader
-        // that fetches the AppUser profile and routes based on
-        // role + status.
-        return HomeScreen(identity: identity);
+        // ── Verified — subscribe to Firestore profile doc ──
+        return StreamBuilder<AppUser?>(
+          stream: userRepository.watchUserProfile(identity.uid),
+          builder: (context, profileSnapshot) {
+            // Waiting for first Firestore snapshot
+            if (profileSnapshot.connectionState == ConnectionState.waiting) {
+              return const _SplashScreen();
+            }
+
+            final profile = profileSnapshot.data;
+
+            // ── Verified but no profile doc → complete profile ──
+            if (profile == null) {
+              return const CompleteProfileScreen();
+            }
+
+            // ── Profile exists — route by status and role ──
+            switch (profile.status) {
+              case UserStatus.pendingApproval:
+                return const AwaitingApprovalScreen();
+              case UserStatus.suspended:
+                return const _SuspendedPlaceholder();
+              case UserStatus.active:
+                // All active roles land on HomeScreen for now.
+                // Step 7 will split to ResidentHome / AdminHome / PublicHome.
+                return HomeScreen(user: profile);
+            }
+          },
+        );
       },
+    );
+  }
+}
+
+/// Temporary suspended-account screen. Step 7 will replace with a
+/// dedicated SuspendedScreen under lib/screens/.
+class _SuspendedPlaceholder extends StatelessWidget {
+  const _SuspendedPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Account Suspended'),
+        automaticallyImplyLeading: false,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.block,
+                size: 80,
+                color: Colors.red.shade700,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your account has been suspended',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Please contact the management office if you believe '
+                'this is a mistake.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              OutlinedButton.icon(
+                onPressed: () => AuthService().signOut(),
+                icon: const Icon(Icons.logout),
+                label: const Text('Sign out'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
