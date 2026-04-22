@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-import 'models/app_user.dart';
+import 'models/auth_identity.dart';
 import 'services/auth_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/email_verification_screen.dart';
@@ -44,12 +44,25 @@ class ResidentialApp extends StatelessWidget {
 
 /// AuthGate is the central routing widget.
 ///
-/// It subscribes to AuthService.authStateChanges and decides which screen
-/// to show based on the current auth state:
-///   - Loading (initial snapshot)  → SplashScreen
-///   - Signed out (user == null)   → LoginScreen
-///   - Signed in + email verified  → HomeScreen
-///   - Signed in + NOT verified    → EmailVerificationScreen
+/// It subscribes to AuthService.authStateChanges (emitting AuthIdentity?)
+/// and decides which screen to show based on the current auth state.
+///
+/// ─── Current routing (post Sprint 2, Step 1.5) ──────────────────────
+///   - Loading (initial snapshot)     → SplashScreen
+///   - Signed out (identity == null)  → LoginScreen
+///   - Signed in + email NOT verified → EmailVerificationScreen
+///   - Signed in + verified           → HomeScreen (transitional)
+///
+/// ─── Future routing (Sprint 2, Steps 4b–7) ──────────────────────────
+/// Once CompleteProfileScreen and role-based dashboards land, the
+/// verified branch will split into six states driven by the user's
+/// Firestore /users/{uid} document:
+///   - No profile doc                  → CompleteProfileScreen
+///   - status: pending_approval        → AwaitingApprovalScreen
+///   - status: active, role: resident  → ResidentHome
+///   - status: active, role: public    → PublicHome
+///   - status: active, role: admin     → AdminHome
+///   - status: suspended               → SuspendedScreen
 ///
 /// This widget is the ONLY place in the app that decides "where should
 /// the user be?" — all screens are "dumb" and just react.
@@ -60,38 +73,37 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final authService = AuthService();
 
-    return StreamBuilder<AppUser?>(
+    return StreamBuilder<AuthIdentity?>(
       stream: authService.authStateChanges,
       builder: (context, snapshot) {
         // ── State 1: Waiting for Firebase to report initial auth state ──
-        // On app cold start, there's a brief moment before Firebase tells
-        // us whether a session is cached. Show a splash during this.
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();
         }
 
-        final user = snapshot.data;
+        final identity = snapshot.data;
 
         // ── State 2: No user signed in → Login ──
-        if (user == null) {
+        if (identity == null) {
           return const LoginScreen();
         }
 
         // ── State 3: Signed in but email NOT verified → verification ──
-        if (!user.emailVerified) {
+        if (!identity.emailVerified) {
           return const EmailVerificationScreen();
         }
 
-        // ── State 4: Signed in AND verified → Home ──
-        return HomeScreen(user: user);
+        // ── State 4: Signed in AND verified → Home (transitional) ──
+        // Step 6 replaces this branch with a Firestore-backed loader
+        // that fetches the AppUser profile and routes based on
+        // role + status.
+        return HomeScreen(identity: identity);
       },
     );
   }
 }
 
 /// Shown briefly while Firebase reports initial auth state on cold start.
-/// Kept in main.dart because it's tightly coupled to the routing logic —
-/// no other screen uses it.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 

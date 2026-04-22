@@ -147,6 +147,68 @@ void main() {
   });
 
   // ═══════════════════════════════════════════════════════════════
+  // createPublicProfile
+  // ═══════════════════════════════════════════════════════════════
+
+  group('createPublicProfile', () {
+    test('creates public profile with role=public and status=active',
+        () async {
+      await repository.createPublicProfile(
+        uid: 'public-uid',
+        email: 'public@example.com',
+        name: 'Public User',
+      );
+
+      final profile = await repository.getUserProfile('public-uid');
+      expect(profile, isNotNull);
+      expect(profile!.role, UserRole.public);
+      expect(profile.status, UserStatus.active);
+      expect(profile.email, 'public@example.com');
+      expect(profile.name, 'Public User');
+    });
+
+    test('SECURITY: public profile has null unit fields', () async {
+      await repository.createPublicProfile(
+        uid: 'public-uid',
+        email: 'public@example.com',
+        name: 'Public User',
+      );
+
+      final profile = await repository.getUserProfile('public-uid');
+      expect(profile!.requestedUnit, isNull);
+      expect(profile.unitNumber, isNull);
+    });
+
+    test(
+        'SECURITY: rejects creation if profile already exists '
+        '(no silent downgrade of existing resident to public)', () async {
+      // Create a pending resident profile first
+      await repository.createUserProfile(
+        uid: 'existing-uid',
+        email: 'resident@example.com',
+        name: 'Resident User',
+        requestedUnit: 'A-12-3',
+      );
+
+      // Attempting to overwrite with a public profile must fail
+      expect(
+        () => repository.createPublicProfile(
+          uid: 'existing-uid',
+          email: 'resident@example.com',
+          name: 'Resident User',
+        ),
+        throwsA(isA<UserRepositoryException>()),
+      );
+
+      // Verify the resident profile is untouched
+      final profile = await repository.getUserProfile('existing-uid');
+      expect(profile!.role, UserRole.resident);
+      expect(profile.status, UserStatus.pendingApproval);
+      expect(profile.requestedUnit, 'A-12-3');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
   // getUserProfile
   // ═══════════════════════════════════════════════════════════════
 

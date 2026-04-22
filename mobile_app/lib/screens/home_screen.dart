@@ -1,31 +1,25 @@
 import 'package:flutter/material.dart';
-import '../models/app_user.dart';
+import '../models/auth_identity.dart';
 import '../services/auth_service.dart';
 
 /// Home screen — shown after successful authentication AND email verification.
 ///
-/// For Day 2, this is a minimal "you're logged in" landing screen that:
-///   - Displays the user's profile info (name, email, verification status)
-///   - Provides a Logout button
+/// ─── TRANSITIONAL WIDGET (Sprint 2, Step 1.5) ────────────────────
+/// This screen currently takes an `AuthIdentity` (Firebase Auth data
+/// only). It displays the Firebase Auth `displayName` and a
+/// verification chip, serving as the "signed-in landing" so the app
+/// compiles and the post-verification flow can be smoke-tested.
 ///
-/// In Sprint 2, this will be replaced with a role-aware dashboard:
-///   - Resident → sees Visitors, Maintenance, Announcements, EV Charger
-///   - Admin → sees User Management, Announcements, Reports
-///   - Staff → sees Maintenance Queue, Visitor Logs, IoT Monitoring
-///
-/// The UI stays this thin on purpose — it makes the routing logic in
-/// main.dart (Step 10) easy to reason about.
+/// In Sprint 2, Step 6, this widget will be replaced with a role-aware
+/// dashboard that takes an `AppUser` loaded from Firestore.
+/// ──────────────────────────────────────────────────────────────────
 class HomeScreen extends StatelessWidget {
-  /// The authenticated user, passed in from the router in main.dart.
-  /// Passing it in (rather than re-fetching from AuthService) makes this
-  /// widget easy to test in isolation — you just construct it with a
-  /// mock AppUser.
-  final AppUser user;
+  /// The current authenticated session''s Firebase Auth identity.
+  final AuthIdentity identity;
 
-  const HomeScreen({super.key, required this.user});
+  const HomeScreen({super.key, required this.identity});
 
   Future<void> _handleLogout(BuildContext context) async {
-    // Confirm before logout — prevents accidental taps.
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -46,14 +40,13 @@ class HomeScreen extends StatelessWidget {
 
     if (confirmed == true) {
       await AuthService().signOut();
-      // authStateChanges stream in main.dart will route back to Login.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final displayName = user.displayName?.isNotEmpty == true
-        ? user.displayName!
+    final displayName = identity.displayName?.isNotEmpty == true
+        ? identity.displayName!
         : 'Resident';
 
     return Scaffold(
@@ -73,7 +66,6 @@ class HomeScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ─── Welcome header ─────────────────────────────
               const SizedBox(height: 16),
               CircleAvatar(
                 radius: 48,
@@ -84,8 +76,7 @@ class HomeScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.bold,
-                    color:
-                        Theme.of(context).colorScheme.onPrimaryContainer,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
                   ),
                 ),
               ),
@@ -104,8 +95,6 @@ class HomeScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.grey.shade600),
               ),
               const SizedBox(height: 32),
-
-              // ─── Profile card ───────────────────────────────
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -128,8 +117,8 @@ class HomeScreen extends StatelessWidget {
                       _InfoRow(
                         icon: Icons.email_outlined,
                         label: 'Email',
-                        value: user.email,
-                        trailing: user.emailVerified
+                        value: identity.email,
+                        trailing: identity.emailVerified
                             ? const Chip(
                                 label: Text('Verified'),
                                 avatar: Icon(
@@ -153,16 +142,13 @@ class HomeScreen extends StatelessWidget {
                       _InfoRow(
                         icon: Icons.fingerprint,
                         label: 'User ID',
-                        value: user.uid,
-                        // Debug-only — will be removed in Sprint 2.
+                        value: identity.uid,
                       ),
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-
-              // ─── Placeholder for future modules ─────────────
               Card(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Padding(
@@ -201,8 +187,6 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Private helper widget for a labeled info row on the profile card.
-/// Not exported — internal to this file only (underscore prefix).
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;

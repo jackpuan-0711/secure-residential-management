@@ -85,6 +85,67 @@ class UserRepository {
     });
   }
 
+  /// Creates /users/{uid} as a PUBLIC-tier account after successful
+  /// Firebase Auth signup.
+  ///
+  /// Public-tier users are authenticated app users who are NOT residents
+  /// and do not need admin approval. They can view announcements and
+  /// submit general feedback. They CANNOT submit property complaints,
+  /// pre-register visitors, or access any unit-scoped features.
+  ///
+  /// The user starts ACTIVE because no verification is needed — they are
+  /// not claiming any unit-level privileges. This is the key distinction
+  /// from createUserProfile (resident claim, starts pendingApproval).
+  ///
+  /// ─── SECURITY INVARIANTS ────────────────────────────────────────
+  ///   - role HARDCODED to public. Clients cannot self-promote.
+  ///   - status HARDCODED to active. Nothing to verify.
+  ///   - requestedUnit and unitNumber HARDCODED to null. Their
+  ///     ABSENCE from the method signature is deliberate — the type
+  ///     system prevents any caller from passing a unit value.
+  ///   - Pre-existence check prevents overwriting (no silent
+  ///     downgrade of a resident profile to public via replay).
+  /// ────────────────────────────────────────────────────────────────
+  ///
+  /// ─── PSM-2 EXTENSION NOTE ──────────────────────────────────────
+  /// The `public` role is a PSM-2 extension of the PSM-1 RBAC model
+  /// (Admin, Staff, Resident, Visitor). DISTINCT from the PSM-1
+  /// Visitor entity (unauthenticated QR-code guest, UC003).
+  /// ────────────────────────────────────────────────────────────────
+  Future<void> createPublicProfile({
+    required String uid,
+    required String email,
+    required String name,
+  }) async {
+    final docRef = _firestore.collection('users').doc(uid);
+
+    final existing = await docRef.get();
+    if (existing.exists) {
+      throw const UserRepositoryException(
+        'User profile already exists. Use updateProfile() instead.',
+      );
+    }
+
+    await docRef.set({
+      'uid': uid,
+      'email': email,
+      'name': name,
+      'role': UserRole.public.toFirestoreValue(),
+      'status': UserStatus.active.toFirestoreValue(),
+      'requestedUnit': null,
+      'unitNumber': null,
+      'phoneNumber': null,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+      'approvedAt': null,
+      'approvedBy': null,
+      'rejectedAt': null,
+      'rejectedBy': null,
+      'mfaEnrolled': false,
+      'fcmTokens': <String>[],
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // READ
   // ═══════════════════════════════════════════════════════════════
