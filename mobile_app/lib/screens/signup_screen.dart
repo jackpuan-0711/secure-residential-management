@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'email_verification_screen.dart';
 
 /// Signup screen — creates a new user account.
 ///
@@ -11,8 +10,17 @@ import 'email_verification_screen.dart';
 ///      - Creates the Firebase Auth account
 ///      - Sets the displayName
 ///      - Sends the email verification link
-///   4. On success, navigate to EmailVerificationScreen
+///   4. On success, pop back to AuthGate — the StreamBuilder router
+///      in main.dart detects the new authenticated-but-unverified
+///      state and renders EmailVerificationScreen.
 ///   5. On failure, show a SnackBar with the humanized error
+///
+/// ─── ARCHITECTURAL NOTE (Sprint 2, Step 4a) ────────────────────
+/// This screen deliberately does NOT create a Firestore /users/{uid}
+/// profile document. Profile creation is deferred to
+/// CompleteProfileScreen (Step 4b), which runs after email
+/// verification. See AuthService.signUp() for the full rationale.
+/// ────────────────────────────────────────────────────────────────
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
 
@@ -57,15 +65,34 @@ class _SignupScreenState extends State<SignupScreen> {
         displayName: _nameController.text,
       );
 
-      // Success — navigate to the email verification screen.
-      // pushReplacement prevents the user from pressing "back" to return
-      // to the signup form (they're now signed in).
+      // Success — pop back to AuthGate.
+      //
+      // ─── ARCHITECTURAL NOTE (Sprint 2, Step 4a) ──────────────
+      // In Sprint 1 this screen explicitly pushed EmailVerificationScreen
+      // because only two post-auth states existed (unverified, verified).
+      //
+      // Sprint 2 introduces six post-auth states:
+      //   1. unverified              → EmailVerificationScreen
+      //   2. verified, no profile    → CompleteProfileScreen
+      //   3. pending_approval        → AwaitingApprovalScreen
+      //   4. active + resident       → ResidentHome
+      //   5. active + public         → PublicHome
+      //   6. suspended               → SuspendedScreen
+      //
+      // Only AuthGate (main.dart) has the full picture needed to
+      // decide the next screen, because the decision depends on BOTH
+      // Firebase Auth state AND the Firestore profile document.
+      //
+      // Popping back lets AuthGate's StreamBuilder react to the new
+      // authenticated-but-unverified state and route to
+      // EmailVerificationScreen from one canonical place.
+      //
+      // The verification email has ALREADY been sent by
+      // AuthService.signUp() via sendEmailVerification(). Nothing
+      // about the user experience changes.
+      // ──────────────────────────────────────────────────────────
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => const EmailVerificationScreen(),
-          ),
-        );
+        Navigator.of(context).pop();
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -106,8 +133,19 @@ class _SignupScreenState extends State<SignupScreen> {
 
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Password is required';
-    if (value.length < 6) return 'Password must be at least 6 characters';
-    // In Sprint 3 we'll add: uppercase, number, special char, strength meter.
+    // OWASP ASVS 4.0.3 §2.1.1 (L1): minimum 12 characters for
+    // memorised secrets. Firebase Auth's server-side minimum is 6;
+    // this stricter client-side rule is our security baseline.
+    if (value.length < 12) {
+      return 'Password must be at least 12 characters';
+    }
+    // Deliberately NO composition rules per ASVS §2.1.9 — requiring
+    // mixed case / digits / symbols reduces entropy in practice
+    // (users append predictable suffixes) and is actively discouraged.
+    //
+    // Sprint 3 hardening per ASVS §2.1.7, §2.1.8:
+    //   - Breach corpus check via Have I Been Pwned k-anonymity API
+    //   - zxcvbn strength meter (advisory UX, not blocking)
     return null;
   }
 
@@ -189,7 +227,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       labelText: 'Password',
                       prefixIcon: const Icon(Icons.lock_outline),
                       border: const OutlineInputBorder(),
-                      helperText: 'At least 6 characters',
+                      helperText: 'At least 12 characters',
                       suffixIcon: IconButton(
                         icon: Icon(_obscurePassword
                             ? Icons.visibility_outlined
