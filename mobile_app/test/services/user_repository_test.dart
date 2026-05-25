@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:residential_app/models/app_user.dart';
-import 'package:residential_app/services/user_repository.dart';
+import 'package:mobile_app/models/app_user.dart';
+import 'package:mobile_app/services/user_repository.dart';
 
 void main() {
   late FakeFirebaseFirestore fakeFirestore;

@@ -146,6 +146,56 @@ class AuthService {
     await _firebaseAuth.currentUser?.reload();
   }
 
+  /// Sends a password-reset email to [email] (out-of-band reset flow).
+  ///
+  /// Used both from the login screen ("Forgot password?", when the user is
+  /// locked out) and from Privacy & Security (signed-in convenience option).
+  ///
+  /// SECURITY NOTE: Firebase intentionally does NOT reveal whether the
+  /// address is registered — the call succeeds either way. We surface a
+  /// neutral "email sent" message so this screen cannot be used as an
+  /// account-enumeration oracle.
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      await _firebaseAuth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_humanizeFirebaseError(e));
+    } catch (e) {
+      throw AuthException('Unexpected error: $e');
+    }
+  }
+
+  /// Changes the signed-in user's password after re-verifying their
+  /// current one.
+  ///
+  /// Reauthentication is required because changing a password is a
+  /// security-sensitive operation: Firebase rejects it with
+  /// `requires-recent-login` if the session is stale, and verifying the
+  /// current password ensures it is the account owner — not someone who
+  /// merely picked up an unlocked device — performing the change.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null || user.email == null) {
+      throw AuthException('No user signed in.');
+    }
+
+    try {
+      final credential = EmailAuthProvider.credential(
+        email: user.email!,
+        password: currentPassword,
+      );
+      await user.reauthenticateWithCredential(credential);
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_humanizeFirebaseError(e));
+    } catch (e) {
+      throw AuthException('Unexpected error: $e');
+    }
+  }
+
   String _humanizeFirebaseError(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':
@@ -162,6 +212,9 @@ class AuthService {
         return 'Password is too weak. Use at least 6 characters.';
       case 'too-many-requests':
         return 'Too many attempts. Please wait a few minutes and try again.';
+      case 'requires-recent-login':
+        return 'For your security, please sign out and sign in again before '
+            'changing your password.';
       case 'network-request-failed':
         return 'Network error. Check your internet connection.';
       case 'operation-not-allowed':

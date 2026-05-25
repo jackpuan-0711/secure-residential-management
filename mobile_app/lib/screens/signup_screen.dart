@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../theme/app_icons.dart';
+import '../theme/app_theme.dart';
 
 /// Signup screen — creates a new user account.
 ///
@@ -99,7 +101,7 @@ class _SignupScreenState extends State<SignupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.message),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -157,150 +159,141 @@ class _SignupScreenState extends State<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Account'),
-      ),
+      appBar: AppBar(title: const Text('Create Account')),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Join your community',
-                    textAlign: TextAlign.center,
-                    style:
-                        Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Register to access the resident portal',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // ─── Name ──────────────────────────────
-                  TextFormField(
-                    controller: _nameController,
-                    textInputAction: TextInputAction.next,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Join your community',
+                      textAlign: TextAlign.center,
+                      style: tt.headlineSmall,
                     ),
-                    validator: _validateName,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Email ─────────────────────────────
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: _validateEmail,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Password ──────────────────────────
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      helperText: 'At least 12 characters',
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Register to access the resident portal',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
-                    validator: _validatePassword,
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.xl),
 
-                  // ─── Confirm password ──────────────────
-                  TextFormField(
-                    controller: _confirmPasswordController,
-                    obscureText: _obscureConfirmPassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleSignup(),
-                    decoration: InputDecoration(
-                      labelText: 'Confirm Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscureConfirmPassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        onPressed: () => setState(
-                          () => _obscureConfirmPassword =
-                              !_obscureConfirmPassword,
-                        ),
+                    // ─── Name ─────────────────────────────
+                    TextFormField(
+                      controller: _nameController,
+                      textInputAction: TextInputAction.next,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Full Name',
+                        prefixIcon: Icon(AppIcons.profileOutlined),
                       ),
+                      validator: _validateName,
                     ),
-                    validator: _validateConfirmPassword,
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.md),
 
-                  // ─── Signup button ─────────────────────
-                  FilledButton(
-                    onPressed: _isLoading ? null : _handleSignup,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    // ─── Email ────────────────────────────
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: 'Email',
+                        prefixIcon: Icon(AppIcons.emailOutlined),
+                      ),
+                      validator: _validateEmail,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Create Account',
-                            style: TextStyle(fontSize: 16),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ─── Password ─────────────────────────
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: Icon(AppIcons.lockOutlined),
+                        helperText: 'At least 12 characters',
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword
+                              ? AppIcons.visibility
+                              : AppIcons.visibilityOff),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
                           ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Back to login ─────────────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Already have an account? '),
-                      TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () => Navigator.of(context).pop(),
-                        child: const Text('Log In'),
+                        ),
                       ),
-                    ],
-                  ),
-                ],
+                      validator: _validatePassword,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ─── Confirm password ─────────────────
+                    TextFormField(
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirmPassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _handleSignup(),
+                      decoration: InputDecoration(
+                        labelText: 'Confirm Password',
+                        prefixIcon: Icon(AppIcons.lockOutlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureConfirmPassword
+                              ? AppIcons.visibility
+                              : AppIcons.visibilityOff),
+                          onPressed: () => setState(
+                            () => _obscureConfirmPassword =
+                                !_obscureConfirmPassword,
+                          ),
+                        ),
+                      ),
+                      validator: _validateConfirmPassword,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── Signup button ────────────────────
+                    FilledButton(
+                      onPressed: _isLoading ? null : _handleSignup,
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Create Account'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ─── Back to login ────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Already have an account?', style: tt.bodyMedium),
+                        TextButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          child: const Text('Log In'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

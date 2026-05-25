@@ -21,6 +21,8 @@ import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
+import '../theme/app_icons.dart';
+import '../theme/app_theme.dart';
 
 class AwaitingApprovalScreen extends StatefulWidget {
   final AuthService? authService;
@@ -76,6 +78,9 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -86,70 +91,67 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
         body: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    Icons.hourglass_top,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Waiting for admin approval',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'An administrator will review your unit number and '
-                    "activate your resident account. You'll get access "
-                    'automatically once approved — no action needed from you.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 32),
-                  if (_isLoading)
-                    const Center(child: CircularProgressIndicator())
-                  else if (_profile?.requestedUnit != null)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Unit under review',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: Colors.grey.shade600),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _profile!.requestedUnit!,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(AppIcons.pending, size: 72, color: cs.primary),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Waiting for admin approval',
+                      textAlign: TextAlign.center,
+                      style: tt.headlineSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'An administrator will review your unit number and '
+                      "activate your resident account. You'll get access "
+                      'automatically once approved — no action needed from you.',
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
-                  const SizedBox(height: 24),
-                  OutlinedButton.icon(
-                    onPressed: _loadProfile,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh status'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _handleSignOut,
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.xl),
+                    if (_isLoading)
+                      const Center(child: CircularProgressIndicator())
+                    else if (_profile?.requestedUnit != null)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Unit under review',
+                                style: tt.bodySmall,
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                _profile!.requestedUnit!,
+                                style: tt.titleLarge,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.lg),
+                    OutlinedButton.icon(
+                      onPressed: _loadProfile,
+                      icon: Icon(AppIcons.refresh),
+                      label: const Text('Refresh status'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TextButton.icon(
+                      onPressed: _handleSignOut,
+                      icon: Icon(AppIcons.logout),
+                      label: const Text('Sign out'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

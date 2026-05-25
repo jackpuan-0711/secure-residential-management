@@ -2,9 +2,9 @@ import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:residential_app/screens/complete_profile_screen.dart';
-import 'package:residential_app/services/auth_service.dart';
-import 'package:residential_app/services/user_repository.dart';
+import 'package:mobile_app/screens/complete_profile_screen.dart';
+import 'package:mobile_app/services/auth_service.dart';
+import 'package:mobile_app/services/user_repository.dart';
 
 void main() {
   late FakeFirebaseFirestore fakeFirestore;

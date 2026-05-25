@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../theme/app_icons.dart';
+import '../theme/app_theme.dart';
 import 'signup_screen.dart';
 
 /// Login screen — the primary authentication entry point.
@@ -72,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.message),
-            backgroundColor: Colors.red.shade700,
+            backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
@@ -86,151 +89,218 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Prompts for an email and sends a password-reset link.
+  /// Used when the user is locked out and cannot reach in-app settings.
+  Future<void> _handleForgotPassword() async {
+    final l10n = AppLocalizations.of(context);
+    final resetController = TextEditingController(text: _emailController.text);
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.resetEmailDialogTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.resetEmailDialogBody),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: resetController,
+              keyboardType: TextInputType.emailAddress,
+              autocorrect: false,
+              decoration: InputDecoration(
+                labelText: l10n.loginEmailLabel,
+                prefixIcon: const Icon(AppIcons.emailOutlined),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.actionCancel),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(resetController.text.trim()),
+            child: Text(l10n.resetEmailSendAction),
+          ),
+        ],
+      ),
+    );
+
+    resetController.dispose();
+
+    if (email == null || email.isEmpty || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    final errorColor = Theme.of(context).colorScheme.error;
+    try {
+      await _authService.sendPasswordResetEmail(email: email);
+      messenger.showSnackBar(
+        SnackBar(content: Text(l10n.resetEmailSentSuccess)),
+      );
+    } on AuthException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: errorColor,
+        ),
+      );
+    }
+  }
+
   /// Client-side email validator.
   /// NOT a substitute for server-side validation (Firebase does that too),
   /// but catches obvious mistakes before wasting a network call.
   String? _validateEmail(String? value) {
+    final l10n = AppLocalizations.of(context);
     if (value == null || value.trim().isEmpty) {
-      return 'Email is required';
+      return l10n.validationEmailRequired;
     }
     // Simple regex: something@something.something
     final emailRegex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$');
     if (!emailRegex.hasMatch(value.trim())) {
-      return 'Enter a valid email address';
+      return l10n.validationEmailInvalid;
     }
     return null;
   }
 
-  /// Client-side password validator.
-  /// Matches Firebase's minimum (6 chars). In Sprint 3 we'll tighten this
-  /// with stronger rules (uppercase, number, symbol) and a strength meter.
+  /// Client-side password validator. Login only checks presence — the
+  /// length/strength policy is enforced where a password is SET (signup,
+  /// change password), never at login, so existing accounts are never
+  /// locked out by a policy change.
   String? _validatePassword(String? value) {
+    final l10n = AppLocalizations.of(context);
     if (value == null || value.isEmpty) {
-      return 'Password is required';
-    }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
+      return l10n.validationPasswordRequired;
     }
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ─── App branding ───────────────────────────────
-                  Icon(
-                    Icons.home_work_rounded,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Welcome Back',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Log in to your secure resident portal',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Colors.grey.shade600,
-                        ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // ─── Email field ────────────────────────────────
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: ConstrainedBox(
+              // Prevents overly wide forms on tablets.
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ─── App branding ─────────────────────────────
+                    Icon(AppIcons.unit, size: 72, color: cs.primary),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      l10n.loginWelcomeTitle,
+                      textAlign: TextAlign.center,
+                      style: tt.headlineMedium,
                     ),
-                    validator: _validateEmail,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Password field ─────────────────────────────
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _handleLogin(),
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      l10n.loginWelcomeSubtitle,
+                      textAlign: TextAlign.center,
+                      style: tt.bodyMedium?.copyWith(
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
-                    validator: _validatePassword,
-                  ),
-                  const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.xl),
 
-                  // ─── Login button ───────────────────────────────
-                  FilledButton(
-                    onPressed: _isLoading ? null : _handleLogin,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    // ─── Email field ──────────────────────────────
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: l10n.loginEmailLabel,
+                        prefixIcon: Icon(AppIcons.emailOutlined),
+                      ),
+                      validator: _validateEmail,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Secure Login',
-                            style: TextStyle(fontSize: 16),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ─── Password field ───────────────────────────
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _handleLogin(),
+                      decoration: InputDecoration(
+                        labelText: l10n.loginPasswordLabel,
+                        prefixIcon: Icon(AppIcons.lockOutlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword
+                              ? AppIcons.visibility
+                              : AppIcons.visibilityOff),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
                           ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Signup navigation ──────────────────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text("Don't have an account? "),
-                      TextButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const SignupScreen(),
-                                  ),
-                                );
-                              },
-                        child: const Text('Sign Up'),
+                        ),
                       ),
-                    ],
-                  ),
-                ],
+                      validator: _validatePassword,
+                    ),
+
+                    // ─── Forgot password ──────────────────────────
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed:
+                            _isLoading ? null : _handleForgotPassword,
+                        child: Text(l10n.loginForgotPassword),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+
+                    // ─── Login button ─────────────────────────────
+                    FilledButton(
+                      onPressed: _isLoading ? null : _handleLogin,
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(l10n.loginButton),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+
+                    // ─── Signup navigation ────────────────────────
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          l10n.loginNoAccountQuestion,
+                          style: tt.bodyMedium,
+                        ),
+                        TextButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SignupScreen(),
+                                    ),
+                                  ),
+                          child: Text(l10n.loginSignUpAction),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

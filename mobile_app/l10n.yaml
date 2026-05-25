@@ -1,0 +1,14 @@
+# Configuration for `flutter gen-l10n`.
+#
+# Generates lib/l10n/app_localizations.dart (+ per-locale files) from the
+# .arb resource bundles in lib/l10n. The generated AppLocalizations class is
+# wired into MaterialApp in lib/main.dart.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+
+# Non-nullable AppLocalizations.of(context): asserts a delegate is present
+# rather than returning null. Every screen that reads strings is reachable
+# only under MaterialApp's localizations delegates, so this is safe.
+nullable-getter: false

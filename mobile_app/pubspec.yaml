@@ -1,4 +1,4 @@
-name: residential_app
+name: mobile_app
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -38,6 +38,18 @@ dependencies:
   firebase_auth: ^6.4.0
   cloud_firestore: ^6.3.0
 
+  # Localization (English + Bahasa Malaysia). flutter_localizations supplies
+  # the Material/Cupertino/Widgets delegates; intl backs the generated
+  # AppLocalizations class produced by `flutter gen-l10n`.
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+
+  # Local persistence for user-facing settings (chosen language, notification
+  # toggles). These are device preferences, NOT security state — security
+  # state lives in Firebase Auth / Firestore.
+  shared_preferences: ^2.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -62,6 +74,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Generate the localized AppLocalizations class from lib/l10n/*.arb
+  # (configured in l10n.yaml at the package root).
+  generate: true
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Phase 0 placeholder — replaced in full by deliverable 0.5.
+    // Default-deny: no collection is accessible until explicit rules grant it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
