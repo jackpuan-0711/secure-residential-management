@@ -66,3 +66,7 @@ desktop.ini
 .env
 .env.local
 *.env
+
+# Admin bootstrap tool (Node) — never commit the service account key or deps
+tools/admin-bootstrap/secrets/
+tools/admin-bootstrap/node_modules/
