@@ -12,8 +12,9 @@ import 'screens/login_screen.dart';
 import 'screens/email_verification_screen.dart';
 import 'screens/complete_profile_screen.dart';
 import 'screens/awaiting_approval_screen.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'screens/awaiting_superadmin_approval_screen.dart';
 import 'screens/admin_home_screen.dart';
+import 'screens/superadmin_home_screen.dart';
 import 'theme/app_theme.dart';
 import 'widgets/main_scaffold.dart';
 
@@ -85,6 +86,26 @@ class AuthGate extends StatelessWidget {
           return const EmailVerificationScreen();
         }
 
+        // ─── PRIVILEGED ROLES ARE CLAIM-DRIVEN ──────────────────────────
+        // The {role} custom claim is the authorization boundary: signed
+        // into the JWT, settable only server-side. Route superadmin and
+        // admin straight from the claim — never from the Firestore profile
+        // — so a tampered users/{uid}.role can't reach an admin surface.
+        // Server-side checks (Firestore rules + approval backend) still
+        // gate every privileged action; this is routing only.
+        if (identity.role == UserRole.superadmin) {
+          return const SuperadminHomeScreen();
+        }
+        if (identity.role == UserRole.admin) {
+          return const AdminHomeScreen();
+        }
+
+        // ─── UNPRIVILEGED BUCKET (resident / public / no claim) ─────────
+        // Resident verification and pending/suspended workflow live in
+        // Firestore, so consult the profile for these non-escalating
+        // routes. Residents gain a {role:'resident'} claim only once the
+        // approval backend lands in a later phase; until then they route
+        // here by profile, which is safe — no admin surface is exposed.
         return StreamBuilder<AppUser?>(
           stream: userRepository.watchUserProfile(identity.uid),
           builder: (context, profileSnapshot) {
@@ -102,76 +123,21 @@ class AuthGate extends StatelessWidget {
               return const _SuspendedPlaceholder();
             }
 
+            // Admin applicant awaiting a superadmin's decision.
+            if (profile.requestedRole == UserRole.admin &&
+                profile.status == UserStatus.pendingApproval) {
+              return const AwaitingSuperadminApprovalScreen();
+            }
+
+            // Resident applicant awaiting an admin's decision.
             if (profile.role == UserRole.resident &&
                 profile.status == UserStatus.pendingApproval) {
               return const AwaitingApprovalScreen();
             }
 
-            if (profile.role == UserRole.admin) {
-              return const _AdminGate();
-            }
-
             return MainScaffold(role: profile.role, user: profile);
           },
         );
-      },
-    );
-  }
-}
-
-class _AdminGate extends StatefulWidget {
-  const _AdminGate();
-
-  @override
-  State<_AdminGate> createState() => _AdminGateState();
-}
-
-class _AdminGateState extends State<_AdminGate> {
-  late Future<bool> _claimsFuture;
-
-  @override
-  void initState() {
-    super.initState();
-    _claimsFuture = _verifyAdminClaims();
-  }
-
-  Future<bool> _verifyAdminClaims() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return false;
-    
-    try {
-      final idTokenResult = await user.getIdTokenResult(true);
-      if (idTokenResult.claims?['admin'] == true) {
-        return true;
-      }
-    } catch (e) {
-      // Ignore
-    }
-
-    await AuthService().signOut();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Unauthorized access attempt logged"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-    return false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<bool>(
-      future: _claimsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _SplashScreen();
-        }
-        if (snapshot.data == true) {
-          return const AdminHomeScreen();
-        }
-        return const _SplashScreen();
       },
     );
   }

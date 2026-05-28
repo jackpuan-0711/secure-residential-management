@@ -1,28 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-/// The role assigned to a user.
-///
-/// THREAT MODEL NOTE:
-/// - Role strings are referenced by Firestore security rules. Renaming
-///   them requires a data migration AND a rules update, in lockstep.
-/// - `resident` and `public` are the only roles a signup flow can
-///   produce. `admin` and `staff` are out-of-band provisioned (Firebase
-///   console or privileged server script), never via client code.
-enum UserRole {
-  admin,
-  staff,
-  resident,
-  public;
-
-  String toFirestoreValue() => name;
-
-  static UserRole fromFirestoreValue(String value) {
-    return UserRole.values.firstWhere(
-      (r) => r.name == value,
-      orElse: () => throw ArgumentError('Unknown UserRole: "$value"'),
-    );
-  }
-}
+import 'user_role.dart';
+// UserRole moved to its own file so AuthIdentity can use it without
+// importing this (cloud_firestore-dependent) library. Re-exported here so
+// existing `import '.../app_user.dart'` callers keep seeing UserRole.
+export 'user_role.dart';
 
 /// The account lifecycle status. Decoupled from role so an admin can
 /// suspend a user without changing what they are.
@@ -82,6 +64,14 @@ class AppUser {
   final UserRole role;
   final UserStatus status;
 
+  /// The elevated role this user is REQUESTING, pending approval. Only
+  /// ever [UserRole.admin] in practice: set when an account applies
+  /// through the admin-registration flow, and cleared when a superadmin
+  /// approves (role + {role} claim are granted together, server-side) or
+  /// rejects. Null for ordinary resident/public signups. Never grants
+  /// privilege on its own — the signed {role} claim does.
+  final UserRole? requestedRole;
+
   /// The unit this user CLAIMS to occupy, pending admin verification.
   /// Shown to admins on the approval dashboard. Cleared on approval
   /// (where its value migrates to unitNumber) or rejection (where it
@@ -114,6 +104,7 @@ class AppUser {
     required this.name,
     required this.role,
     required this.status,
+    this.requestedRole,
     this.requestedUnit,
     this.unitNumber,
     this.phoneNumber,
@@ -142,6 +133,9 @@ class AppUser {
       name: data['name'] as String,
       role: UserRole.fromFirestoreValue(data['role'] as String),
       status: UserStatus.fromFirestoreValue(data['status'] as String),
+      requestedRole: data['requestedRole'] != null
+          ? UserRole.fromFirestoreValue(data['requestedRole'] as String)
+          : null,
       requestedUnit: data['requestedUnit'] as String?,
       unitNumber: data['unitNumber'] as String?,
       phoneNumber: data['phoneNumber'] as String?,
@@ -164,6 +158,7 @@ class AppUser {
       'name': name,
       'role': role.toFirestoreValue(),
       'status': status.toFirestoreValue(),
+      'requestedRole': requestedRole?.toFirestoreValue(),
       'requestedUnit': requestedUnit,
       'unitNumber': unitNumber,
       'phoneNumber': phoneNumber,
@@ -185,6 +180,7 @@ class AppUser {
     String? name,
     UserRole? role,
     UserStatus? status,
+    UserRole? requestedRole,
     String? requestedUnit,
     String? unitNumber,
     String? phoneNumber,
@@ -202,6 +198,7 @@ class AppUser {
       name: name ?? this.name,
       role: role ?? this.role,
       status: status ?? this.status,
+      requestedRole: requestedRole ?? this.requestedRole,
       requestedUnit: requestedUnit ?? this.requestedUnit,
       unitNumber: unitNumber ?? this.unitNumber,
       phoneNumber: phoneNumber ?? this.phoneNumber,

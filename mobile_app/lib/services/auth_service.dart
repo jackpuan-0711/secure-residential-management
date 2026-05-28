@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/auth_identity.dart';
+import '../models/user_role.dart';
 
 /// Central authentication service for the Residential Management app.
 ///
@@ -32,12 +33,36 @@ class AuthService {
 
   AuthService.withInstance(this._firebaseAuth);
 
+  /// Stream of auth-state changes for AuthGate routing.
+  ///
+  /// Uses asyncMap (not map) because resolving the {role} custom claim
+  /// requires awaiting the ID token. The read is NON-forced
+  /// (getIdTokenResult() without refresh): we use the token already
+  /// cached by the SDK rather than hitting the token endpoint on every
+  /// emission. Consequence: a user whose role claim was JUST changed
+  /// server-side (e.g. a superadmin just approved them) sees the new
+  /// role only after the token naturally refreshes — on next sign-in or
+  /// an explicit getIdToken(true). That trade-off is intentional for
+  /// this step; a post-approval refresh affordance comes with the
+  /// dashboards.
+  ///
+  /// SECURITY: the role surfaced here drives client routing / UX ONLY.
+  /// It is never the authorization boundary — privileged operations are
+  /// re-verified server-side against request.auth.token.role (approval
+  /// backend + Firestore rules).
   Stream<AuthIdentity?> get authStateChanges {
-    return _firebaseAuth.authStateChanges().map(_mapFirebaseUser);
+    return _firebaseAuth
+        .authStateChanges()
+        .asyncMap(_mapFirebaseUserWithClaims);
   }
 
   AuthIdentity? get currentUser => _mapFirebaseUser(_firebaseAuth.currentUser);
 
+  /// Synchronous mapper used by [currentUser] and the post-signUp /
+  /// post-signIn return paths, which don't (and shouldn't) await an extra
+  /// token read. [AuthIdentity.role] is left null here; the
+  /// [authStateChanges] stream is the canonical source of the resolved
+  /// claim role.
   AuthIdentity? _mapFirebaseUser(User? user) {
     if (user == null) return null;
     return AuthIdentity(
@@ -46,6 +71,43 @@ class AuthService {
       displayName: user.displayName,
       emailVerified: user.emailVerified,
     );
+  }
+
+  /// Stream mapper: like [_mapFirebaseUser] but also resolves the {role}
+  /// custom claim from the (cached) ID token. See [authStateChanges].
+  Future<AuthIdentity?> _mapFirebaseUserWithClaims(User? user) async {
+    if (user == null) return null;
+
+    UserRole? role;
+    try {
+      final token = await user.getIdTokenResult();
+      role = _roleFromClaim(token.claims?['role']);
+    } catch (_) {
+      // Token read failed (offline / transient). Fall back to no role —
+      // AuthGate then routes via the Firestore profile, never granting
+      // privilege on a failed or absent claim read.
+      role = null;
+    }
+
+    return AuthIdentity(
+      uid: user.uid,
+      email: user.email ?? '',
+      displayName: user.displayName,
+      emailVerified: user.emailVerified,
+      role: role,
+    );
+  }
+
+  /// Leniently maps a raw custom-claim value to a [UserRole]. Unknown or
+  /// non-string values yield null (treated as unprivileged) rather than
+  /// throwing — a malformed or absent claim must never crash the auth
+  /// stream.
+  UserRole? _roleFromClaim(Object? claim) {
+    if (claim is! String) return null;
+    for (final role in UserRole.values) {
+      if (role.name == claim) return role;
+    }
+    return null;
   }
 
   /// Creates a new account with email + password, sets the display name,

@@ -2,7 +2,7 @@
 //
 // GENESIS ADMIN PROVISIONING — out-of-band, run ONCE, locally.
 // Elevates an EXISTING Firebase Auth account to super-admin by:
-//   1) setting an unforgeable custom claim { admin: true }   (the security boundary)
+//   1) setting an unforgeable custom claim { role: 'superadmin' }  (the security boundary)
 //   2) mirroring role/status into the Firestore user document (queryable app data)
 //
 // WHY A CLAIM, NOT JUST A FIRESTORE FIELD (viva):
@@ -46,15 +46,15 @@ async function main() {
   const uid = user.uid;
 
   // 2) The security boundary: set the unforgeable custom claim.
-  await auth.setCustomUserClaims(uid, { admin: true });
+  await auth.setCustomUserClaims(uid, { role: 'superadmin' });
 
   // 3) Mirror into Firestore as queryable app data. merge:true so we don't
   //    clobber a profile the app may already have created for this account.
   await db.collection('users').doc(uid).set(
     {
       email: ADMIN_EMAIL,
-      role: 'admin',
-      status: 'approved',
+      role: 'superadmin',
+      status: 'active',
       elevatedBy: 'genesis-bootstrap-script',
       elevatedAt: FieldValue.serverTimestamp(),
     },
@@ -62,7 +62,7 @@ async function main() {
   );
 
   console.log(`\n[OK] ${ADMIN_EMAIL} (uid ${uid}) is now super-admin.`);
-  console.log('Claim { admin:true } set + Firestore users doc mirrored.');
+  console.log("Claim { role: 'superadmin' } set + Firestore users doc mirrored.");
   console.log('On next login the app must call getIdToken(true) to see the claim.\n');
   process.exit(0);
 }
