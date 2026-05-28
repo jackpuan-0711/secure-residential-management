@@ -343,4 +343,37 @@ class UserRepository {
     final snapshot = await query.get();
     return snapshot.docs.map((doc) => doc.data()).toList();
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // LIST — pending residents (live stream for approval dashboards)
+  // ═══════════════════════════════════════════════════════════════
+
+  /// Live stream of pending resident applicants for the admin /
+  /// superadmin approval queue.
+  ///
+  /// Filters `role == 'resident' AND status == 'pending_approval'`,
+  /// ordered by `createdAt` ASC (oldest first — fair-queue policy:
+  /// the longest-waiting applicant surfaces at the top). Returns a
+  /// Stream so the dashboard removes rows automatically as approve /
+  /// reject transitions land — the underlying query no longer matches
+  /// once status flips off `pending_approval`.
+  ///
+  /// SECURITY: Firestore rules grant read on `/users` only to the
+  /// owner OR a claim admin / superadmin. An unprivileged client
+  /// subscribing here would see every doc rejected by rules and the
+  /// stream would surface a permission-denied error.
+  Stream<List<AppUser>> listPendingResidents() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: UserRole.resident.toFirestoreValue())
+        .where('status',
+            isEqualTo: UserStatus.pendingApproval.toFirestoreValue())
+        .orderBy('createdAt')
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => AppUser.fromFirestore(d, null))
+              .toList(),
+        );
+  }
 }

@@ -704,4 +704,140 @@ void main() {
       expect(pending, isEmpty);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════
+  // listPendingResidents (live stream for approval dashboards)
+  // ═══════════════════════════════════════════════════════════════
+
+  group('listPendingResidents', () {
+    Future<void> settle() async {
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test(
+        'emits only pending residents — excludes approved, rejected, and non-resident accounts',
+        () async {
+      await repository.createUserProfile(
+        uid: 'pending-r1',
+        email: 'r1@example.com',
+        name: 'Pending Resident',
+        requestedUnit: 'A-01-01',
+      );
+      await repository.createPublicProfile(
+        uid: 'pub-1',
+        email: 'pub@example.com',
+        name: 'Public',
+      );
+      await repository.createUserProfile(
+        uid: 'approved-r1',
+        email: 'r2@example.com',
+        name: 'Approved Resident',
+        requestedUnit: 'B-02-02',
+      );
+      await repository.approveResident(
+        targetUid: 'approved-r1',
+        approvedByUid: 'admin-001',
+      );
+      await repository.createUserProfile(
+        uid: 'rejected-r1',
+        email: 'r3@example.com',
+        name: 'Rejected',
+        requestedUnit: 'C-03-03',
+      );
+      await repository.rejectAsPublic(
+        targetUid: 'rejected-r1',
+        rejectedByUid: 'admin-001',
+      );
+
+      final emissions = <List<AppUser>>[];
+      final sub = repository.listPendingResidents().listen(emissions.add);
+      await settle();
+      await sub.cancel();
+
+      expect(emissions, isNotEmpty);
+      expect(emissions.last.map((u) => u.uid).toSet(), {'pending-r1'});
+    });
+
+    test('returns empty list when no pending residents exist', () async {
+      final emissions = <List<AppUser>>[];
+      final sub = repository.listPendingResidents().listen(emissions.add);
+      await settle();
+      await sub.cancel();
+
+      expect(emissions, isNotEmpty);
+      expect(emissions.last, isEmpty);
+    });
+
+    test('emits an updated list when a pending resident is approved',
+        () async {
+      await repository.createUserProfile(
+        uid: 'pending-1',
+        email: 'p1@example.com',
+        name: 'Alice',
+        requestedUnit: 'A-01-01',
+      );
+      await repository.createUserProfile(
+        uid: 'pending-2',
+        email: 'p2@example.com',
+        name: 'Bob',
+        requestedUnit: 'B-02-02',
+      );
+
+      final emissions = <List<AppUser>>[];
+      final sub = repository.listPendingResidents().listen(emissions.add);
+      await settle();
+
+      await repository.approveResident(
+        targetUid: 'pending-1',
+        approvedByUid: 'admin-001',
+      );
+      await settle();
+      await sub.cancel();
+
+      expect(emissions, isNotEmpty);
+      expect(emissions.first.length, 2,
+          reason: 'Initial emission should include both pending residents');
+      expect(emissions.last.length, 1);
+      expect(emissions.last.first.uid, 'pending-2',
+          reason:
+              'Approved resident must disappear from the pending stream');
+    });
+
+    test('orders by createdAt ascending (oldest first — fair queue)',
+        () async {
+      await repository.createUserProfile(
+        uid: 'first',
+        email: 'first@example.com',
+        name: 'First Applicant',
+        requestedUnit: 'A-01-01',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await repository.createUserProfile(
+        uid: 'second',
+        email: 'second@example.com',
+        name: 'Second Applicant',
+        requestedUnit: 'B-02-02',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await repository.createUserProfile(
+        uid: 'third',
+        email: 'third@example.com',
+        name: 'Third Applicant',
+        requestedUnit: 'C-03-03',
+      );
+
+      final emissions = <List<AppUser>>[];
+      final sub = repository.listPendingResidents().listen(emissions.add);
+      await settle();
+      await sub.cancel();
+
+      expect(emissions, isNotEmpty);
+      expect(
+        emissions.last.map((u) => u.uid).toList(),
+        ['first', 'second', 'third'],
+      );
+    });
+  });
 }

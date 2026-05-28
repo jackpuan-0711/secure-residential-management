@@ -1,9 +1,126 @@
 rules_version = '2';
 
+// ─────────────────────────────────────────────────────────────────────
+// Secure Residential Management — Firestore rules
+//
+// Authorization invariant: every admin / superadmin gate below reads
+// `request.auth.token.role` (the Firebase Auth custom claim, signed
+// into the JWT and settable ONLY server-side). NEVER the Firestore
+// `role` field — that would let a tampered users/{uid}.role grant
+// access to itself (CWE-269).
+// ─────────────────────────────────────────────────────────────────────
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Phase 0 placeholder — replaced in full by deliverable 0.5.
-    // Default-deny: no collection is accessible until explicit rules grant it.
+
+    // ═════════════════════════════════════════════════════════════════
+    // /users/{uid} — Firestore mirror of the authenticated session.
+    // ═════════════════════════════════════════════════════════════════
+    match /users/{uid} {
+
+      // ── helpers ────────────────────────────────────────────────────
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      function isOwner() {
+        return isSignedIn() && request.auth.uid == uid;
+      }
+      function hasAdminClaim() {
+        return isSignedIn()
+            && request.auth.token.email_verified == true
+            && request.auth.token.role in ['admin', 'superadmin'];
+      }
+      function existing() { return resource.data; }
+      function incoming() { return request.resource.data; }
+      function unchanged(field) {
+        return existing()[field] == incoming()[field];
+      }
+
+      // ── READ ───────────────────────────────────────────────────────
+      // Self can read self. Admin / superadmin (claim + verified email)
+      // can read any /users/{uid} — required for the pending-residents
+      // listing and approval dashboards.
+      // Rationale: CWE-639 (BOLA). Without self-or-admin gating, any
+      // signed-in user could enumerate other residents' personal data
+      // (email, unit, phone).
+      allow read: if isOwner() || hasAdminClaim();
+
+      // ── CREATE ─────────────────────────────────────────────────────
+      // Owner may create their own /users/{uid} doc, and ONLY with the
+      // unprivileged combinations the signup flows emit. Server-side
+      // approval is the ONLY path to admin/staff/superadmin or to any
+      // verified unit; a pending admin request (requestedRole='admin')
+      // is a deferred enhancement and is forbidden in this phase.
+      // Rationale: CWE-269 (privilege escalation) and CWE-915 (mass
+      // assignment) — without these restrictions, a client could plant
+      // role='admin' + status='active' + unitNumber='C-22-250' at
+      // signup and self-grant a verified-resident record.
+      allow create: if isOwner()
+        && incoming().uid == request.auth.uid
+        && incoming().role in ['resident', 'public']
+        && incoming().status in ['pending_approval', 'active']
+        && incoming().requestedRole == null
+        && incoming().unitNumber == null
+        && incoming().approvedAt == null
+        && incoming().approvedBy == null
+        && incoming().rejectedAt == null
+        && incoming().rejectedBy == null;
+
+      // ── UPDATE (self) ──────────────────────────────────────────────
+      // Owner may edit their own non-privileged fields (name,
+      // phoneNumber, mfaEnrolled, fcmTokens, updatedAt). Identity
+      // fields (uid, email, createdAt), authorization fields (role,
+      // status, requestedRole), the unit fields (requestedUnit,
+      // unitNumber), and ALL audit stamps must be unchanged.
+      // Rationale: CWE-269 — without locking role/status the owner
+      // could self-approve. Without locking the audit stamps and unit
+      // fields, an attacker bypassing UserRepository could fabricate
+      // an approved-resident record on themselves (CWE-639 BOLA).
+      // The application-layer UserRepository.updateProfile already
+      // only touches name/phoneNumber/updatedAt; this rule is the
+      // defence-in-depth backstop.
+      allow update: if isOwner()
+        && unchanged('uid')
+        && unchanged('email')
+        && unchanged('createdAt')
+        && unchanged('role')
+        && unchanged('status')
+        && unchanged('requestedRole')
+        && unchanged('requestedUnit')
+        && unchanged('unitNumber')
+        && unchanged('approvedAt')
+        && unchanged('approvedBy')
+        && unchanged('rejectedAt')
+        && unchanged('rejectedBy');
+
+      // ── UPDATE (admin / superadmin, acting on someone else) ────────
+      // Admin / superadmin (claim + verified email) may write to OTHER
+      // users' docs. Role MUST equal previous, with ONE narrow
+      // carve-out: the rejection transition resident → public (a
+      // de-escalation, never a privilege grant). All privilege grants
+      // (anything → admin / staff / superadmin) MUST go through the
+      // server-side claim path; this rule denies them at the rules
+      // layer too — even a compromised admin session cannot mint new
+      // admins via raw Firestore writes.
+      // Rationale: CWE-269 — the claim is the primary boundary, and
+      // this rule is the defence-in-depth backstop.
+      allow update: if hasAdminClaim()
+        && request.auth.uid != uid
+        && (
+             unchanged('role')
+             ||
+             (existing().role == 'resident' && incoming().role == 'public')
+           );
+
+      // ── DELETE ─────────────────────────────────────────────────────
+      // Never. The /users doc is an audit record (approvedBy,
+      // rejectedBy, createdAt) and removing it would erase evidence of
+      // approval decisions. Account deletion is a separate admin
+      // operation handled out-of-band against Firebase Auth.
+      allow delete: if false;
+    }
+
+    // Default-deny for every other collection until explicitly granted.
     match /{document=**} {
       allow read, write: if false;
     }
