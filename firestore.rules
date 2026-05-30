@@ -35,6 +35,9 @@ service cloud.firestore {
       function unchanged(field) {
         return existing()[field] == incoming()[field];
       }
+      function affectedKeys() {
+        return incoming().diff(existing()).affectedKeys();
+      }
 
       // ── READ ───────────────────────────────────────────────────────
       // Self can read self. Admin / superadmin (claim + verified email)
@@ -67,31 +70,41 @@ service cloud.firestore {
         && incoming().rejectedBy == null;
 
       // ── UPDATE (self) ──────────────────────────────────────────────
-      // Owner may edit their own non-privileged fields (name,
-      // phoneNumber, mfaEnrolled, fcmTokens, updatedAt). Identity
-      // fields (uid, email, createdAt), authorization fields (role,
-      // status, requestedRole), the unit fields (requestedUnit,
-      // unitNumber), and ALL audit stamps must be unchanged.
-      // Rationale: CWE-269 — without locking role/status the owner
-      // could self-approve. Without locking the audit stamps and unit
-      // fields, an attacker bypassing UserRepository could fabricate
-      // an approved-resident record on themselves (CWE-639 BOLA).
-      // The application-layer UserRepository.updateProfile already
-      // only touches name/phoneNumber/updatedAt; this rule is the
-      // defence-in-depth backstop.
-      allow update: if isOwner()
-        && unchanged('uid')
-        && unchanged('email')
-        && unchanged('createdAt')
-        && unchanged('role')
-        && unchanged('status')
-        && unchanged('requestedRole')
-        && unchanged('requestedUnit')
-        && unchanged('unitNumber')
-        && unchanged('approvedAt')
-        && unchanged('approvedBy')
-        && unchanged('rejectedAt')
-        && unchanged('rejectedBy');
+      // A self-update is allowed on exactly ONE of two narrow paths.
+      // `affectedKeys().hasOnly([...])` is the workhorse: any key NOT in
+      // the allowlist (uid, email, createdAt, unitNumber, role unless
+      // noted, all audit stamps) is rejected by omission — CWE-915 (mass
+      // assignment) and CWE-639 (BOLA) closed in one stroke.
+      allow update: if isOwner() && (
+        // (a) Profile self-edit — name / phone only. CWE-269: role and
+        //     status are pinned so the owner cannot self-approve or
+        //     change tier. Matches UserRepository.updateProfile.
+        (
+          affectedKeys().hasOnly(['name', 'phoneNumber', 'updatedAt'])
+          && unchanged('role')
+          && unchanged('status')
+        )
+        ||
+        // (b) Apply-for-resident — an active PUBLIC user submits a unit
+        //     claim (UserRepository.applyForResident). Only these four
+        //     keys may change and role stays 'public'; the {role} claim
+        //     is granted later, server-side, on admin approval — never
+        //     here (CWE-269). The unit regex is re-checked server-side
+        //     because client validation is not a trust boundary
+        //     (CWE-20 / CWE-602).
+        (
+          affectedKeys().hasOnly(
+            ['status', 'requestedRole', 'requestedUnit', 'updatedAt'])
+          && existing().role == 'public'
+          && existing().status == 'active'
+          && incoming().status == 'pending_approval'
+          && incoming().requestedRole == 'resident'
+          && incoming().requestedUnit is string
+          && incoming().requestedUnit
+              .matches('^[A-C]-([1-9]|[12][0-9]|30)-([1-9]|1[0-9]|20)$')
+          && unchanged('role')
+        )
+      );
 
       // ── UPDATE (admin / superadmin, acting on someone else) ────────
       // Admin / superadmin (claim + verified email) may write to OTHER

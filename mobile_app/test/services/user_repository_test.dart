@@ -839,5 +839,155 @@ void main() {
         ['first', 'second', 'third'],
       );
     });
+
+    test('includes public users who applied for resident access',
+        () async {
+      await repository.createPublicProfile(
+        uid: 'pub-app',
+        email: 'pub@example.com',
+        name: 'Pat Applicant',
+      );
+      await repository.applyForResident(
+        uid: 'pub-app',
+        requestedUnit: 'A-1-1',
+      );
+      await repository.createUserProfile(
+        uid: 'res-signup',
+        email: 'r@example.com',
+        name: 'Rita',
+        requestedUnit: 'B-2-2',
+      );
+
+      final emissions = <List<AppUser>>[];
+      final sub = repository.listPendingResidents().listen(emissions.add);
+      await settle();
+      await sub.cancel();
+
+      expect(emissions, isNotEmpty);
+      expect(
+        emissions.last.map((u) => u.uid).toSet(),
+        {'pub-app', 'res-signup'},
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // applyForResident (public → resident upgrade)
+  // ═══════════════════════════════════════════════════════════════
+
+  group('applyForResident', () {
+    test('promotes an active public user to a pending resident applicant',
+        () async {
+      await repository.createPublicProfile(
+        uid: 'pub-1',
+        email: 'pub@example.com',
+        name: 'Pat Public',
+      );
+
+      await repository.applyForResident(
+        uid: 'pub-1',
+        requestedUnit: 'A-12-5',
+      );
+
+      final user = await repository.getUserProfile('pub-1');
+      expect(user!.status, UserStatus.pendingApproval);
+      expect(user.requestedRole, UserRole.resident);
+      expect(user.requestedUnit, 'A-12-5');
+      expect(user.role, UserRole.public,
+          reason: 'role stays public until an admin approves');
+      expect(user.unitNumber, isNull);
+    });
+
+    test('INVARIANT: rejects a malformed unit (defence in depth)',
+        () async {
+      await repository.createPublicProfile(
+        uid: 'pub-1',
+        email: 'pub@example.com',
+        name: 'Pat',
+      );
+
+      // Floor 99 / unit 99 are out of range — the repo must reject even
+      // if a tampered client bypassed the form validator.
+      expect(
+        () => repository.applyForResident(
+          uid: 'pub-1',
+          requestedUnit: 'A-99-99',
+        ),
+        throwsA(isA<UserRepositoryException>()),
+      );
+
+      final user = await repository.getUserProfile('pub-1');
+      expect(user!.status, UserStatus.active,
+          reason: 'a rejected application must not mutate the profile');
+    });
+
+    test('INVARIANT: rejects a double-apply', () async {
+      await repository.createPublicProfile(
+        uid: 'pub-1',
+        email: 'pub@example.com',
+        name: 'Pat',
+      );
+      await repository.applyForResident(uid: 'pub-1', requestedUnit: 'A-1-1');
+
+      expect(
+        () => repository.applyForResident(
+          uid: 'pub-1',
+          requestedUnit: 'B-2-2',
+        ),
+        throwsA(isA<UserRepositoryException>()),
+      );
+    });
+
+    test('INVARIANT: rejects a non-public user', () async {
+      // An active resident cannot re-apply.
+      await repository.createUserProfile(
+        uid: 'res-1',
+        email: 'r@example.com',
+        name: 'Rita Resident',
+        requestedUnit: 'A-1-1',
+      );
+      await repository.approveResident(
+        targetUid: 'res-1',
+        approvedByUid: 'admin-001',
+      );
+
+      expect(
+        () => repository.applyForResident(
+          uid: 'res-1',
+          requestedUnit: 'B-2-2',
+        ),
+        throwsA(isA<UserRepositoryException>()),
+      );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // approveResident — public-applicant path
+  // ═══════════════════════════════════════════════════════════════
+
+  group('approveResident (public applicant)', () {
+    test('flips role to resident, clears requestedRole, promotes unit',
+        () async {
+      await repository.createPublicProfile(
+        uid: 'pub-1',
+        email: 'pub@example.com',
+        name: 'Pat',
+      );
+      await repository.applyForResident(uid: 'pub-1', requestedUnit: 'C-3-3');
+
+      await repository.approveResident(
+        targetUid: 'pub-1',
+        approvedByUid: 'admin-001',
+      );
+
+      final user = await repository.getUserProfile('pub-1');
+      expect(user!.role, UserRole.resident);
+      expect(user.requestedRole, isNull);
+      expect(user.status, UserStatus.active);
+      expect(user.unitNumber, 'C-3-3');
+      expect(user.requestedUnit, isNull);
+      expect(user.approvedBy, 'admin-001');
+      expect(user.isVerifiedResident, isTrue);
+    });
   });
 }

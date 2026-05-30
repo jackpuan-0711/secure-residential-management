@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/app_user.dart';
+import '../utils/validators.dart';
 
 /// Thrown when a repository operation violates a domain invariant
 /// (e.g. attempting to self-approve, or mutating an immutable field).
@@ -206,6 +207,70 @@ class UserRepository {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // SELF-SERVICE — public → resident upgrade application
+  // ═══════════════════════════════════════════════════════════════
+
+  /// An active PUBLIC user applies to become a resident by submitting a
+  /// unit claim. Mirrors the resident-signup pending state, but as an
+  /// in-place upgrade rather than a fresh profile.
+  ///
+  /// TRANSACTION + invariants (a double-apply or a non-public caller is
+  /// a bug or an attack, so we reject rather than silently no-op):
+  ///   - profile must exist
+  ///   - role == 'public' AND status == 'active'
+  ///   - requestedRole == null AND requestedUnit == null (no double-apply)
+  ///   - requestedUnit matches the canonical format
+  ///
+  /// On success: status → pending_approval, requestedRole → 'resident',
+  /// requestedUnit → `<value>`. role stays 'public' until an admin approves
+  /// (which grants the role + the server-side claim). unitNumber stays
+  /// null — it is only ever set by verified approval.
+  ///
+  /// SECURITY: the unit regex is re-validated HERE (defence in depth)
+  /// even though the form and the Firestore rule both check it — client
+  /// validation is never a trust boundary (CWE-20 / CWE-602).
+  Future<void> applyForResident({
+    required String uid,
+    required String requestedUnit,
+  }) async {
+    final unit = requestedUnit.trim();
+    if (!unitNumberRegExp.hasMatch(unit)) {
+      throw const UserRepositoryException('Invalid unit number format.');
+    }
+
+    final docRef = _firestore.collection('users').doc(uid);
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(docRef);
+      if (!snap.exists) {
+        throw const UserRepositoryException(
+          'Cannot apply: no profile on record for this account.',
+        );
+      }
+
+      final data = snap.data()!;
+      if (data['role'] != UserRole.public.toFirestoreValue() ||
+          data['status'] != UserStatus.active.toFirestoreValue()) {
+        throw const UserRepositoryException(
+          'Only an active public user can apply for resident access.',
+        );
+      }
+      if (data['requestedRole'] != null || data['requestedUnit'] != null) {
+        throw const UserRepositoryException(
+          'A resident application is already on record.',
+        );
+      }
+
+      tx.update(docRef, {
+        'status': UserStatus.pendingApproval.toFirestoreValue(),
+        'requestedRole': UserRole.resident.toFirestoreValue(),
+        'requestedUnit': unit,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   // ADMIN OPERATIONS
   // ═══════════════════════════════════════════════════════════════
 
@@ -260,7 +325,13 @@ class UserRepository {
         );
       }
 
+      // A public applicant being approved is promoted to resident here;
+      // an already-resident applicant simply keeps role=resident. Either
+      // way the post-state is unambiguously a verified resident with no
+      // outstanding role request, so we set both explicitly.
       tx.update(docRef, {
+        'role': UserRole.resident.toFirestoreValue(),
+        'requestedRole': null,
         'status': UserStatus.active.toFirestoreValue(),
         'unitNumber': requestedUnit,
         'requestedUnit': null,
@@ -351,21 +422,24 @@ class UserRepository {
   /// Live stream of pending resident applicants for the admin /
   /// superadmin approval queue.
   ///
-  /// Filters `role == 'resident' AND status == 'pending_approval'`,
-  /// ordered by `createdAt` ASC (oldest first — fair-queue policy:
-  /// the longest-waiting applicant surfaces at the top). Returns a
-  /// Stream so the dashboard removes rows automatically as approve /
-  /// reject transitions land — the underlying query no longer matches
-  /// once status flips off `pending_approval`.
+  /// Surfaces users with `status == 'pending_approval'` who are EITHER
+  /// already role `resident` (signed up as a resident) OR a `public`
+  /// user who applied to upgrade (`requestedRole == 'resident'`). Ordered
+  /// by `createdAt` ASC (fair-queue: the longest-waiting applicant is on
+  /// top). A Stream, so rows vanish automatically as approve / reject
+  /// transitions flip status off `pending_approval`.
   ///
-  /// SECURITY: Firestore rules grant read on `/users` only to the
-  /// owner OR a claim admin / superadmin. An unprivileged client
-  /// subscribing here would see every doc rejected by rules and the
-  /// stream would surface a permission-denied error.
+  /// The role/requestedRole OR is applied client-side after a single
+  /// `status` equality query: Firestore can't express a disjunction
+  /// across two fields in one query, and filtering the small pending set
+  /// in Dart avoids a composite index and keeps the predicate obvious.
+  ///
+  /// SECURITY: Firestore rules grant read on `/users` only to the owner
+  /// OR a claim admin / superadmin; an unprivileged subscriber gets a
+  /// permission-denied error rather than data.
   Stream<List<AppUser>> listPendingResidents() {
     return _firestore
         .collection('users')
-        .where('role', isEqualTo: UserRole.resident.toFirestoreValue())
         .where('status',
             isEqualTo: UserStatus.pendingApproval.toFirestoreValue())
         .orderBy('createdAt')
@@ -373,6 +447,9 @@ class UserRepository {
         .map(
           (snap) => snap.docs
               .map((d) => AppUser.fromFirestore(d, null))
+              .where((u) =>
+                  u.role == UserRole.resident ||
+                  u.requestedRole == UserRole.resident)
               .toList(),
         );
   }
