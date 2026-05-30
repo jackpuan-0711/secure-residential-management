@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_app/screens/complete_profile_screen.dart';
 import 'package:mobile_app/services/auth_service.dart';
 import 'package:mobile_app/services/user_repository.dart';
+import 'package:mobile_app/utils/validators.dart';
 
 void main() {
   late FakeFirebaseFirestore fakeFirestore;
@@ -77,22 +78,22 @@ void main() {
     });
 
     testWidgets(
-        'resident branch with lowercase unit (a-12-3) shows validation error',
+        'resident branch with out-of-range unit (A-99-99) shows validation error',
         (tester) async {
       await tester.pumpWidget(buildScreen());
 
       await tester.tap(find.text("I'm a resident"));
       await tester.pumpAndSettle();
 
+      // Floor 99 / unit 99 are out of range (max 30 / 20). The input
+      // formatter uppercases but can't fix an out-of-range value, so the
+      // shared validator rejects it.
       await tester.enterText(
-          find.byKey(const Key('unitNumberField')), 'a-12-3');
+          find.byKey(const Key('unitNumberField')), 'A-99-99');
       await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('Format: A-12-3 (block-floor-unit, uppercase letters)'),
-        findsOneWidget,
-      );
+      expect(find.text(unitNumberError), findsOneWidget);
     });
 
     testWidgets(

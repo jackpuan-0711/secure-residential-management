@@ -1,20 +1,22 @@
-/// AwaitingApprovalScreen — Sprint 2, Step 4b.
+/// AwaitingApprovalScreen — resident application "under review" landing.
 ///
-/// Gated landing for authenticated residents with status=pendingApproval.
-/// The user has:
-///   - A verified Firebase Auth account
-///   - A Firestore /users/{uid} doc with role=resident, status=pendingApproval
-///   - A requestedUnit value awaiting admin verification
+/// Gated landing for any user whose resident application is pending an
+/// admin decision: either a resident signup (role=resident,
+/// status=pending_approval) or a public user who applied to upgrade
+/// (role=public, requestedRole=resident, status=pending_approval).
 ///
-/// Transition out happens when admin calls UserRepository.approveResident
-/// (promotes requestedUnit → unitNumber, status → active) or rejectAsPublic
-/// (role → public, status → active). main.dart StreamBuilder will detect
-/// the change and route accordingly.
+/// Transition out happens when an admin calls approveResident (status →
+/// active, requestedUnit → unitNumber, role → resident) or rejectAsPublic
+/// (role → public, status → active). The AuthGate StreamBuilder detects
+/// the change and re-routes automatically.
 ///
-/// This screen is intentionally minimal — no feedback forms, no
-/// announcements access. Firestore rules (Step 5) will enforce that
-/// pendingApproval users cannot read resident-tier collections. The UI
-/// merely reflects that restriction honestly.
+/// NOTE: there is intentionally NO email/push notification on approval in
+/// this phase — that requires the deferred Flask grant endpoint. The user
+/// learns the outcome by re-opening the app (the router re-routes them).
+///
+/// While pending, the user may "Continue browsing as public" — public
+/// features stay available; Firestore rules enforce that a pending user
+/// has no unit-scoped access regardless of what this UI offers.
 library;
 
 import 'package:flutter/material.dart';
@@ -23,6 +25,7 @@ import '../services/auth_service.dart';
 import '../services/user_repository.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import 'public_home_screen.dart';
 
 class AwaitingApprovalScreen extends StatefulWidget {
   final AuthService? authService;
@@ -76,16 +79,25 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
     await _authService.signOut();
   }
 
+  void _continueAsPublic() {
+    final profile = _profile;
+    if (profile == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => PublicHomeScreen(user: profile)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final unit = _profile?.requestedUnit;
 
     return PopScope(
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Account Under Review'),
+          title: const Text('Application Under Review'),
           automaticallyImplyLeading: false,
         ),
         body: SafeArea(
@@ -101,15 +113,16 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
                     Icon(AppIcons.pending, size: 72, color: cs.primary),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Waiting for admin approval',
+                      'Application under review',
                       textAlign: TextAlign.center,
                       style: tt.headlineSmall,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'An administrator will review your unit number and '
-                      "activate your resident account. You'll get access "
-                      'automatically once approved — no action needed from you.',
+                      'Your resident application for unit '
+                      '${unit ?? "your unit"} is being reviewed by our '
+                      "administrators. You'll see your status here once "
+                      "it's processed.",
                       textAlign: TextAlign.center,
                       style: tt.bodyMedium?.copyWith(
                         color: cs.onSurfaceVariant,
@@ -118,31 +131,25 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
                     const SizedBox(height: AppSpacing.xl),
                     if (_isLoading)
                       const Center(child: CircularProgressIndicator())
-                    else if (_profile?.requestedUnit != null)
+                    else if (unit != null)
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(AppSpacing.md),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Unit under review',
-                                style: tt.bodySmall,
-                              ),
+                              Text('Unit under review', style: tt.bodySmall),
                               const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                _profile!.requestedUnit!,
-                                style: tt.titleLarge,
-                              ),
+                              Text(unit, style: tt.titleLarge),
                             ],
                           ),
                         ),
                       ),
                     const SizedBox(height: AppSpacing.lg),
-                    OutlinedButton.icon(
-                      onPressed: _loadProfile,
-                      icon: Icon(AppIcons.refresh),
-                      label: const Text('Refresh status'),
+                    FilledButton.icon(
+                      onPressed: _isLoading ? null : _continueAsPublic,
+                      icon: Icon(AppIcons.home),
+                      label: const Text('Continue browsing as public'),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextButton.icon(

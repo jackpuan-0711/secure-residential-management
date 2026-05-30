@@ -1,15 +1,147 @@
 import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../services/auth_service.dart';
+import '../services/user_repository.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
-class ProfileScreen extends StatelessWidget {
+/// Shows the signed-in user's profile (hosted as a tab inside the role
+/// home shells). Supports an inline edit of the two MUTABLE fields (name,
+/// phone) via UserRepository.updateProfile — role/status/unit are NOT
+/// editable here (privilege-relevant; admin-gated elsewhere).
+class ProfileScreen extends StatefulWidget {
   final AppUser user;
+  final AuthService? authService;
+  final UserRepository? userRepository;
 
-  const ProfileScreen({super.key, required this.user});
+  const ProfileScreen({
+    super.key,
+    required this.user,
+    this.authService,
+    this.userRepository,
+  });
 
-  Future<void> _handleLogout(BuildContext context) async {
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  late final AuthService _authService;
+  late final UserRepository _userRepository;
+  late AppUser _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _authService = widget.authService ?? AuthService();
+    _userRepository = widget.userRepository ?? UserRepository();
+    _user = widget.user;
+  }
+
+  static String _humanizeRole(UserRole role) => switch (role) {
+        UserRole.superadmin => 'Super Admin',
+        UserRole.admin => 'Admin',
+        UserRole.staff => 'Staff',
+        UserRole.resident => 'Resident',
+        UserRole.public => 'Public',
+      };
+
+  static String _humanizeStatus(UserStatus status) => switch (status) {
+        UserStatus.pendingApproval => 'Pending approval',
+        UserStatus.active => 'Active',
+        UserStatus.suspended => 'Suspended',
+      };
+
+  static String _formatDate(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dt.year}-${two(dt.month)}-${two(dt.day)}';
+  }
+
+  Future<void> _edit() async {
+    final nameController = TextEditingController(text: _user.name);
+    final phoneController =
+        TextEditingController(text: _user.phoneNumber ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit profile'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameController,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Full name'),
+                validator: (v) => (v == null || v.trim().length < 2)
+                    ? 'Enter at least 2 characters'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: phoneController,
+                keyboardType: TextInputType.phone,
+                decoration:
+                    const InputDecoration(labelText: 'Phone (optional)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.of(ctx).pop(true);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    final newName = nameController.text.trim();
+    final newPhoneRaw = phoneController.text.trim();
+    nameController.dispose();
+    phoneController.dispose();
+
+    if (saved != true) return;
+
+    final newPhone = newPhoneRaw.isEmpty ? null : newPhoneRaw;
+    try {
+      await _userRepository.updateProfile(
+        uid: _user.uid,
+        name: newName,
+        phoneNumber: newPhone,
+      );
+      if (mounted) {
+        setState(
+          () => _user = _user.copyWith(name: newName, phoneNumber: newPhone),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Update failed: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _logout() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -27,22 +159,28 @@ class ProfileScreen extends StatelessWidget {
         ],
       ),
     );
-
     if (confirmed == true) {
-      await AuthService().signOut();
+      await _authService.signOut();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final unitDisplay = _user.unitNumber != null
+        ? _user.unitNumber!
+        : (_user.requestedUnit != null
+            ? '${_user.requestedUnit!} (pending)'
+            : 'Not assigned');
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile'),
         actions: [
           IconButton(
-            icon: const Icon(AppIcons.logout),
-            onPressed: () => _handleLogout(context),
-            color: Theme.of(context).colorScheme.error,
+            icon: const Icon(AppIcons.edit),
+            tooltip: 'Edit',
+            onPressed: _edit,
           ),
         ],
       ),
@@ -57,30 +195,44 @@ class ProfileScreen extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              user.name.isNotEmpty ? user.name : 'Resident',
-              style: Theme.of(context).textTheme.headlineSmall,
+              _user.name.isNotEmpty ? _user.name : 'User',
+              style: tt.headlineSmall,
             ),
             Text(
-              user.email,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.onSurfaceVariant,
-              ),
+              _user.email,
+              style: tt.bodyMedium?.copyWith(color: AppColors.onSurfaceVariant),
             ),
-            const SizedBox(height: AppSpacing.xxl),
+            const SizedBox(height: AppSpacing.xl),
             _ProfileItem(
               icon: AppIcons.unit,
-              label: 'Unit Number',
-              value: user.unitNumber ?? user.requestedUnit ?? 'Not Assigned',
+              label: 'Unit',
+              value: unitDisplay,
             ),
             _ProfileItem(
               icon: AppIcons.verified,
               label: 'Role',
-              value: user.role.name.toUpperCase(),
+              value: _humanizeRole(_user.role),
             ),
             _ProfileItem(
               icon: AppIcons.pending,
               label: 'Status',
-              value: user.status.name.toUpperCase(),
+              value: _humanizeStatus(_user.status),
+            ),
+            _ProfileItem(
+              icon: AppIcons.phone,
+              label: 'Phone',
+              value: _user.phoneNumber ?? 'Not set',
+            ),
+            _ProfileItem(
+              icon: AppIcons.calendar,
+              label: 'Member since',
+              value: _formatDate(_user.createdAt),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            OutlinedButton.icon(
+              onPressed: _logout,
+              icon: const Icon(AppIcons.logout),
+              label: const Text('Sign out'),
             ),
           ],
         ),

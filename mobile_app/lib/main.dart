@@ -15,8 +15,9 @@ import 'screens/awaiting_approval_screen.dart';
 import 'screens/awaiting_superadmin_approval_screen.dart';
 import 'screens/admin_home_screen.dart';
 import 'screens/superadmin_home_screen.dart';
+import 'screens/public_home_screen.dart';
+import 'screens/resident_home_screen.dart';
 import 'theme/app_theme.dart';
-import 'widgets/main_scaffold.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,19 +124,26 @@ class AuthGate extends StatelessWidget {
               return const _SuspendedPlaceholder();
             }
 
-            // Admin applicant awaiting a superadmin's decision.
+            // Admin applicant awaiting a superadmin's decision (Phase B).
             if (profile.requestedRole == UserRole.admin &&
                 profile.status == UserStatus.pendingApproval) {
               return const AwaitingSuperadminApprovalScreen();
             }
 
-            // Resident applicant awaiting an admin's decision.
-            if (profile.role == UserRole.resident &&
-                profile.status == UserStatus.pendingApproval) {
+            // Any other pending applicant — a resident signup OR a public
+            // user who applied to upgrade — waits on the admin queue.
+            if (profile.status == UserStatus.pendingApproval) {
               return const AwaitingApprovalScreen();
             }
 
-            return MainScaffold(role: profile.role, user: profile);
+            // Active, verified resident.
+            if (profile.role == UserRole.resident) {
+              return ResidentHomeScreen(user: profile);
+            }
+
+            // Everyone else active (public, and any non-routed tier)
+            // lands on the public home.
+            return PublicHomeScreen(user: profile);
           },
         );
       },

@@ -24,6 +24,7 @@ library;
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
+import '../utils/validators.dart';
 
 enum _RoleChoice { resident, publicUser }
 
@@ -50,8 +51,6 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   _RoleChoice _selectedRole = _RoleChoice.publicUser;
   bool _isLoading = false;
-
-  static final _unitRegex = RegExp(r'^[A-Z]{1,2}-\d{1,3}-\d{1,4}$');
 
   @override
   void initState() {
@@ -120,14 +119,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
   }
 
   String? _validateUnit(String? value) {
+    // Public users have no unit to validate.
     if (_selectedRole != _RoleChoice.resident) return null;
-    if (value == null || value.trim().isEmpty) {
-      return 'Unit number is required';
-    }
-    if (!_unitRegex.hasMatch(value.trim())) {
-      return 'Format: A-12-3 (block-floor-unit, uppercase letters)';
-    }
-    return null;
+    // Shared validator — same regex enforced by Firestore rules and
+    // re-checked in UserRepository (client validation is UX only).
+    return validateUnitNumber(value);
   }
 
   @override
@@ -195,10 +191,11 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                           key: const Key('unitNumberField'),
                           controller: _unitController,
                           textCapitalization: TextCapitalization.characters,
+                          inputFormatters: unitNumberInputFormatters,
                           textInputAction: TextInputAction.done,
                           decoration: const InputDecoration(
                             labelText: 'Unit Number',
-                            hintText: 'e.g. A-12-3',
+                            hintText: unitNumberHint,
                             prefixIcon: Icon(Icons.home_outlined),
                             border: OutlineInputBorder(),
                           ),

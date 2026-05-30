@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
-import '../services/app_settings.dart';
 import 'help_center_screen.dart';
-import 'language_settings_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'privacy_security_screen.dart';
 import '../theme/app_icons.dart';
@@ -11,17 +9,6 @@ import '../theme/app_theme.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
-  /// Maps the active locale to its display name for the Language tile.
-  String _languageLabel(AppLocalizations l10n, Locale locale) {
-    switch (locale.languageCode) {
-      case 'ms':
-        return l10n.languageMalay;
-      case 'en':
-      default:
-        return l10n.languageEnglish;
-    }
-  }
-
   void _open(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
@@ -29,7 +16,6 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final settings = SettingsScope.of(context);
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsTitle)),
@@ -47,17 +33,6 @@ class SettingsScreen extends StatelessWidget {
             title: l10n.settingsPrivacySecurity,
             onTap: () => _open(context, const PrivacySecurityScreen()),
           ),
-          _SettingTile(
-            icon: Icons.language_rounded,
-            title: l10n.settingsLanguage,
-            trailing: Text(
-              _languageLabel(l10n, settings.locale),
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                  ),
-            ),
-            onTap: () => _open(context, const LanguageSettingsScreen()),
-          ),
           const SizedBox(height: AppSpacing.md),
           _SectionHeader(title: l10n.settingsSectionSupport),
           _SettingTile(
@@ -69,6 +44,15 @@ class SettingsScreen extends StatelessWidget {
             icon: AppIcons.info,
             title: l10n.settingsAbout,
             onTap: () => _showAboutDialog(context, l10n),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Account section. Strings are hardcoded (no l10n keys): the
+          // localization system is intentionally left untouched this phase.
+          const _SectionHeader(title: 'Account'),
+          _SettingTile(
+            icon: Icons.delete_outline_rounded,
+            title: 'Delete account',
+            onTap: () => _showDeleteAccountDialog(context),
           ),
         ],
       ),
@@ -84,7 +68,8 @@ class SettingsScreen extends StatelessWidget {
   /// that is needless information disclosure: build/version strings and
   /// the full dependency inventory help an attacker fingerprint the app
   /// and look up known CVEs. End users gain nothing from it. This dialog
-  /// shows only the product name, purpose, and copyright.
+  /// shows only the product name, purpose, and copyright. (This is why
+  /// Settings deliberately does NOT surface an app-version row.)
   /// ────────────────────────────────────────────────────────────────────
   void _showAboutDialog(BuildContext context, AppLocalizations l10n) {
     showDialog<void>(
@@ -110,6 +95,27 @@ class SettingsScreen extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: Text(l10n.actionClose),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Placeholder only — no action is wired. Self-service account deletion
+  /// is out of scope for this phase.
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete account'),
+        content: const Text(
+          "Account deletion isn't available yet. Please contact the "
+          'management office if you need your account removed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -144,13 +150,11 @@ class _SectionHeader extends StatelessWidget {
 class _SettingTile extends StatelessWidget {
   final IconData icon;
   final String title;
-  final Widget? trailing;
   final VoidCallback onTap;
 
   const _SettingTile({
     required this.icon,
     required this.title,
-    this.trailing,
     required this.onTap,
   });
 
@@ -161,7 +165,7 @@ class _SettingTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: AppColors.primary),
         title: Text(title),
-        trailing: trailing ?? const Icon(AppIcons.arrowRight, size: 16),
+        trailing: const Icon(AppIcons.arrowRight, size: 16),
         onTap: onTap,
       ),
     );
