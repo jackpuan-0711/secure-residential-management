@@ -70,3 +70,11 @@ desktop.ini
 # Admin bootstrap tool (Node) — never commit the service account key or deps
 tools/admin-bootstrap/secrets/
 tools/admin-bootstrap/node_modules/
+
+# Local Claude Code settings (machine-specific; not shared across the team).
+# `**/` so it matches wherever Claude writes it (currently mobile_app/.claude/,
+# possibly repo-root .claude/ in future sessions).
+**/.claude/settings.local.json
+
+# Transient progress / resume scratch files (resume aids, not deliverables)
+_progress_*.md
