@@ -7,6 +7,14 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "announcements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pinned", "order": "DESCENDING" },
+        { "fieldPath": "postedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

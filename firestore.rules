@@ -133,6 +133,70 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ═════════════════════════════════════════════════════════════════
+    // /announcements/{id} — building-wide notices authored by staff.
+    //
+    // AUTHORITATIVE write gate. AnnouncementRepository (the client) is a
+    // convenience layer only; THIS rule is the trust boundary. Every
+    // privilege check reads the signed `request.auth.token.role` claim,
+    // never a Firestore mirror (CWE-269).
+    // ═════════════════════════════════════════════════════════════════
+    match /announcements/{id} {
+
+      // ── READ ───────────────────────────────────────────────────────
+      // Any registered, email-verified user (resident / public / staff /
+      // admin / superadmin) may read the feed. No pre-login access — the
+      // feed is not public, and an unverified email is not yet a trusted
+      // identity. Role is intentionally NOT gated here: announcements are
+      // broadcast to the whole verified resident base.
+      allow read: if request.auth != null
+        && request.auth.token.email_verified == true;
+
+      // ── CREATE ─────────────────────────────────────────────────────
+      // Claim-gated to admin / superadmin (CWE-269/285): only a
+      // server-minted {role} claim opens this path; a tampered Firestore
+      // mirror cannot. Every field is then validated server-side because
+      // the client is not a trust boundary (CWE-20 / CWE-602):
+      //   • postedBy pinned to the caller's uid          — CWE-639 (no forging authorship)
+      //   • postedByRole pinned to the caller's claim     — audit integrity
+      //   • postedAt MUST equal request.time              — server timestamp, not a client clock
+      //   • priority / pinned / title / body type+bounds  — input validation
+      //   • keys().hasOnly([...])                          — allowlist, rejects any extra field
+      //                                                      (CWE-915 mass assignment), mirroring
+      //                                                      the /users self-update allowlist
+      allow create: if request.auth.token.role in ['admin', 'superadmin']
+        // email_verified parity with the read gate and /users: an unverified
+        // identity that cannot read must not write either.
+        && request.auth.token.email_verified == true
+        && request.resource.data.postedBy == request.auth.uid
+        && request.resource.data.postedByRole == request.auth.token.role
+        && request.resource.data.postedAt == request.time
+        && request.resource.data.priority in ['info', 'warning', 'critical']
+        && request.resource.data.pinned is bool
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 5000
+        && request.resource.data.keys().hasOnly(
+             ['title', 'body', 'postedBy', 'postedByRole',
+              'priority', 'pinned', 'postedAt']);
+
+      // ── UPDATE ─────────────────────────────────────────────────────
+      // Immutable. A posted announcement is an audit-bearing broadcast;
+      // editing it in place would let the visible text drift from what
+      // residents were originally notified of. Correction = delete +
+      // repost, which leaves a cleaner trail than a silent in-place edit.
+      allow update: if false;
+
+      // ── DELETE ─────────────────────────────────────────────────────
+      // Admin / superadmin only (claim-gated): moderation and the delete
+      // half of the delete-and-repost correction flow. email_verified parity
+      // with read/create — an unverified identity that can't read must not write.
+      allow delete: if request.auth.token.role in ['admin', 'superadmin']
+        && request.auth.token.email_verified == true;
+    }
+
     // Default-deny for every other collection until explicitly granted.
     match /{document=**} {
       allow read, write: if false;

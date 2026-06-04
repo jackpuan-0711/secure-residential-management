@@ -69,7 +69,13 @@ desktop.ini
 
 # Admin bootstrap tool (Node) — never commit the service account key or deps
 tools/admin-bootstrap/secrets/
-tools/admin-bootstrap/node_modules/
+
+# Node dependencies — any package dir in the repo (firestore-tests/, tools/…).
+# Source + lockfiles are committed; installed deps never are.
+**/node_modules/
+
+# Firebase emulator debug log (regenerated on every emulator run).
+firestore-debug.log
 
 # Local Claude Code settings (machine-specific; not shared across the team).
 # `**/` so it matches wherever Claude writes it (currently mobile_app/.claude/,
