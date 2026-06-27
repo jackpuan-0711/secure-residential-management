@@ -39,18 +39,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   static String _humanizeRole(UserRole role) => switch (role) {
-        UserRole.superadmin => 'Super Admin',
-        UserRole.admin => 'Admin',
-        UserRole.staff => 'Staff',
-        UserRole.resident => 'Resident',
-        UserRole.public => 'Public',
-      };
+    UserRole.superadmin => 'Super Admin',
+    UserRole.admin => 'Admin',
+    UserRole.staff => 'Staff',
+    UserRole.resident => 'Resident',
+    UserRole.public => 'Public',
+  };
 
   static String _humanizeStatus(UserStatus status) => switch (status) {
-        UserStatus.pendingApproval => 'Pending approval',
-        UserStatus.active => 'Active',
-        UserStatus.suspended => 'Suspended',
-      };
+    UserStatus.pendingApproval => 'Pending approval',
+    UserStatus.active => 'Active',
+    UserStatus.suspended => 'Suspended',
+  };
 
   static String _formatDate(DateTime dt) {
     String two(int n) => n.toString().padLeft(2, '0');
@@ -59,8 +59,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _edit() async {
     final nameController = TextEditingController(text: _user.name);
-    final phoneController =
-        TextEditingController(text: _user.phoneNumber ?? '');
+    final phoneController = TextEditingController(
+      text: _user.phoneNumber ?? '',
+    );
     final formKey = GlobalKey<FormState>();
 
     final saved = await showDialog<bool>(
@@ -84,8 +85,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               TextFormField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
-                decoration:
-                    const InputDecoration(labelText: 'Phone (optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Phone (optional)',
+                ),
               ),
             ],
           ),
@@ -120,14 +122,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         uid: _user.uid,
         name: newName,
         phoneNumber: newPhone,
+        clearPhoneNumber: newPhone == null,
       );
       if (mounted) {
         setState(
           () => _user = _user.copyWith(name: newName, phoneNumber: newPhone),
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
       }
     } catch (e) {
       if (mounted) {
@@ -170,8 +173,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final unitDisplay = _user.unitNumber != null
         ? _user.unitNumber!
         : (_user.requestedUnit != null
-            ? '${_user.requestedUnit!} (pending)'
-            : 'Not assigned');
+              ? '${_user.requestedUnit!} (pending)'
+              : 'Not assigned');
 
     return Scaffold(
       appBar: AppBar(
@@ -260,10 +263,7 @@ class _ProfileItem extends StatelessWidget {
         child: ListTile(
           leading: Icon(icon, color: AppColors.primary),
           title: Text(label, style: Theme.of(context).textTheme.labelSmall),
-          subtitle: Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          subtitle: Text(value, style: Theme.of(context).textTheme.titleMedium),
         ),
       ),
     );

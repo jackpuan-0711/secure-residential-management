@@ -13,7 +13,7 @@
 /// automatically once the new claim is present.
 ///
 /// Intentionally minimal: an unapproved admin applicant has no admin
-/// privileges, and Firestore rules (a later phase) enforce that.
+/// privileges; callable functions and Firestore rules enforce that boundary.
 library;
 
 import 'package:flutter/material.dart';
@@ -23,6 +23,24 @@ import '../theme/app_theme.dart';
 
 class AwaitingSuperadminApprovalScreen extends StatelessWidget {
   const AwaitingSuperadminApprovalScreen({super.key});
+
+  Future<void> _refreshAccess(BuildContext context) async {
+    try {
+      await AuthService().refreshCurrentUserClaims();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Access refreshed.')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not refresh access: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,6 +83,12 @@ class AwaitingSuperadminApprovalScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xl),
+                    FilledButton.icon(
+                      onPressed: () => _refreshAccess(context),
+                      icon: Icon(AppIcons.refresh),
+                      label: const Text('Refresh access'),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
                     TextButton.icon(
                       onPressed: () => AuthService().signOut(),
                       icon: Icon(AppIcons.logout),

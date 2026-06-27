@@ -4,7 +4,7 @@
   "private": true,
   "description": "Emulator-backed security-rules tests for ../firestore.rules. NOT part of the shipped app — run against the Firestore emulator (see README/run command). The authoritative gate is firestore.rules; this suite proves it.",
   "scripts": {
-    "test": "node --test announcements.rules.test.js"
+    "test": "node --test --test-concurrency=1 users.rules.test.js announcements.rules.test.js visitor_invitations.rules.test.js maintenance_requests.rules.test.js ev_charging.rules.test.js ev_device_status.rules.test.js"
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.1",

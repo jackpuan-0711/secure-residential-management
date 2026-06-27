@@ -21,6 +21,7 @@
 ///     Distinct from the PSM-1 Visitor entity (unauthenticated QR guest).
 library;
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/user_repository.dart';
@@ -90,12 +91,10 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
         );
       }
 
-      // TODO(step-6): rely on AuthGate router after main.dart StreamBuilder
-      // lands — remove manual SnackBar.
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile created!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile created!')));
       }
     } catch (e) {
       if (mounted) {
@@ -115,6 +114,21 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
 
   String _humanizeError(Object e) {
     if (e is UserRepositoryException) return e.message;
+    if (e is FirebaseException) {
+      switch (e.code) {
+        case 'permission-denied':
+          return 'Profile was rejected by the database rules. Please update '
+              'Firestore rules and try again.';
+        case 'unavailable':
+        case 'deadline-exceeded':
+          return 'Could not reach Firebase. Check your connection or emulator '
+              'setup, then try again.';
+        case 'already-exists':
+          return 'A profile already exists for this account.';
+        default:
+          return 'Failed to save profile (${e.code}).';
+      }
+    }
     return 'Failed to save profile. Please try again.';
   }
 
@@ -150,14 +164,14 @@ class _CompleteProfileScreenState extends State<CompleteProfileScreen> {
                     Text(
                       'Setting up account for:',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey.shade600,
-                          ),
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     Text(
                       email,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 32),
 

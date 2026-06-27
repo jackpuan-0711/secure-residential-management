@@ -64,12 +64,9 @@ class AppUser {
   final UserRole role;
   final UserStatus status;
 
-  /// The elevated role this user is REQUESTING, pending approval. Only
-  /// ever [UserRole.admin] in practice: set when an account applies
-  /// through the admin-registration flow, and cleared when a superadmin
-  /// approves (role + {role} claim are granted together, server-side) or
-  /// rejects. Null for ordinary resident/public signups. Never grants
-  /// privilege on its own — the signed {role} claim does.
+  /// The role requested by an active public user. The supported self-service
+  /// request is resident access; administrator roles are assigned directly by
+  /// the superadmin and never requested from a public account.
   final UserRole? requestedRole;
 
   /// The unit this user CLAIMS to occupy, pending admin verification.

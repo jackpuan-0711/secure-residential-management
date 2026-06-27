@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../models/auth_identity.dart';
 import '../models/user_role.dart';
 
@@ -17,9 +18,8 @@ import '../models/user_role.dart';
 ///
 /// Design decisions:
 ///   - Uses `instance` of FirebaseAuth (singleton). For unit testing,
-///     inject a mock via the `AuthService.withInstance()` constructor
-///     (wired up in Step 8).
-///   - Returns our own `AuthIdentity` model, never Firebase''s `User` —
+///     inject a mock via the `AuthService.withInstance()` constructor.
+///   - Returns our own `AuthIdentity` model, never Firebase's `User` —
 ///     this enforces the architectural boundary described in
 ///     models/auth_identity.dart. AuthIdentity is the auth-session type.
 ///     It is DISTINCT from AppUser, which is the Firestore domain model
@@ -33,27 +33,29 @@ class AuthService {
 
   AuthService.withInstance(this._firebaseAuth);
 
-  /// Stream of auth-state changes for AuthGate routing.
+  /// Stream of token-state changes for AuthGate routing.
   ///
   /// Uses asyncMap (not map) because resolving the {role} custom claim
-  /// requires awaiting the ID token. The read is NON-forced
-  /// (getIdTokenResult() without refresh): we use the token already
-  /// cached by the SDK rather than hitting the token endpoint on every
-  /// emission. Consequence: a user whose role claim was JUST changed
-  /// server-side (e.g. a superadmin just approved them) sees the new
-  /// role only after the token naturally refreshes — on next sign-in or
-  /// an explicit getIdToken(true). That trade-off is intentional for
-  /// this step; a post-approval refresh affordance comes with the
-  /// dashboards.
+  /// requires awaiting the ID token. The read is FORCED-REFRESH
+  /// (getIdTokenResult(true)) so that newly-set custom claims — e.g. a
+  /// just-granted superadmin role from the bootstrap script, or a
+  /// just-approved admin elevation — propagate to the client on the
+  /// next auth-state emission rather than waiting up to ~1 hour for
+  /// the cached token to naturally expire.
   ///
-  /// SECURITY: the role surfaced here drives client routing / UX ONLY.
-  /// It is never the authorization boundary — privileged operations are
-  /// re-verified server-side against request.auth.token.role (approval
-  /// backend + Firestore rules).
+  /// SECURITY (CWE-613, Insufficient Session Expiration): we trade one
+  /// network round trip per auth-state emission for guaranteed claim
+  /// freshness. Without forced refresh, a privileged user whose claim
+  /// was just set would still be routed as unprivileged because their
+  /// cached token predates the claim — exactly the failure mode we
+  /// hit during development.
+  ///
+  /// SECURITY (routing vs authorisation): the role surfaced here drives
+  /// client routing / UX ONLY. It is never the authorisation boundary —
+  /// privileged operations are re-verified server-side against
+  /// request.auth.token.role (approval backend + Firestore rules).
   Stream<AuthIdentity?> get authStateChanges {
-    return _firebaseAuth
-        .authStateChanges()
-        .asyncMap(_mapFirebaseUserWithClaims);
+    return _firebaseAuth.idTokenChanges().asyncMap(_mapFirebaseUserWithClaims);
   }
 
   AuthIdentity? get currentUser => _mapFirebaseUser(_firebaseAuth.currentUser);
@@ -74,13 +76,14 @@ class AuthService {
   }
 
   /// Stream mapper: like [_mapFirebaseUser] but also resolves the {role}
-  /// custom claim from the (cached) ID token. See [authStateChanges].
+  /// custom claim from a freshly-refreshed ID token. See [authStateChanges].
   Future<AuthIdentity?> _mapFirebaseUserWithClaims(User? user) async {
     if (user == null) return null;
 
     UserRole? role;
     try {
-      final token = await user.getIdTokenResult();
+      // Force refresh (the `true` argument) — see authStateChanges doc.
+      final token = await user.getIdTokenResult(true);
       role = _roleFromClaim(token.claims?['role']);
     } catch (_) {
       // Token read failed (offline / transient). Fall back to no role —
@@ -161,6 +164,7 @@ class AuthService {
 
       return _mapFirebaseUser(refreshedUser)!;
     } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth sign-up failed [${e.code}]: ${e.message}');
       throw AuthException(_humanizeFirebaseError(e));
     } catch (e) {
       throw AuthException('Unexpected error: $e');
@@ -183,6 +187,7 @@ class AuthService {
       }
       return _mapFirebaseUser(user)!;
     } on FirebaseAuthException catch (e) {
+      debugPrint('Firebase Auth sign-in failed [${e.code}]: ${e.message}');
       throw AuthException(_humanizeFirebaseError(e));
     } catch (e) {
       throw AuthException('Unexpected error: $e');
@@ -206,6 +211,15 @@ class AuthService {
 
   Future<void> reloadCurrentUser() async {
     await _firebaseAuth.currentUser?.reload();
+  }
+
+  Future<void> refreshCurrentUserClaims() async {
+    final user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw AuthException('No user signed in.');
+    }
+    await user.getIdTokenResult(true);
+    await user.reload();
   }
 
   /// Sends a password-reset email to [email] (out-of-band reset flow).

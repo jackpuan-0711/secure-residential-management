@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
+
 import '../models/app_user.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import 'announcements_screen.dart';
 import 'apply_for_resident_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
 
-/// Home for active PUBLIC users — and a browsing surface for pending
-/// applicants who chose "Continue browsing as public" on the awaiting
-/// screen. Self-contained shell: a bottom nav with Home / Profile /
-/// Settings (no dead-ends; the home AppBar shows a back button only when
-/// this screen was pushed, e.g. from the awaiting screen).
+/// Home for active public users and pending applicants who continue browsing.
+/// It exposes the parts of the residential portal that do not require a
+/// verified unit, while making the resident/admin request sequence explicit.
 class PublicHomeScreen extends StatefulWidget {
   final AppUser user;
 
@@ -62,11 +62,18 @@ class _PublicHomeTab extends StatelessWidget {
 
   const _PublicHomeTab({required this.user});
 
+  bool get _hasPendingRequest => user.status == UserStatus.pendingApproval;
+
+  void _openResidentApplication(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ApplyForResidentScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final hasPendingApplication = user.requestedRole != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),
@@ -79,51 +86,47 @@ class _PublicHomeTab extends StatelessWidget {
               style: tt.titleMedium?.copyWith(color: cs.onSurfaceVariant),
             ),
             Text(
-              user.name.isNotEmpty ? user.name : 'Guest',
+              user.name.isNotEmpty ? user.name : 'User',
               style: tt.headlineSmall,
             ),
-            const SizedBox(height: AppSpacing.lg),
-            const _InfoCard(
-              icon: AppIcons.announcements,
-              title: 'Public Announcements',
-              body: 'Community-wide announcements will appear here.',
-            ),
             const SizedBox(height: AppSpacing.md),
-            const _InfoCard(
-              icon: AppIcons.communityBulletin,
-              title: 'Community Info',
-              body: 'Facilities, contacts, and general information for the '
-                  'development.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            if (hasPendingApplication)
-              Card(
-                color: cs.secondaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Row(
-                    children: [
-                      Icon(AppIcons.pending, color: cs.onSecondaryContainer),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Text(
-                          'Your resident application is under review.',
-                          style: tt.bodyMedium
-                              ?.copyWith(color: cs.onSecondaryContainer),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
+            if (_hasPendingRequest)
+              _PendingRequestCard(user: user)
             else
-              _ApplyCard(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ApplyForResidentScreen(),
-                  ),
-                ),
+              const _AccessCard(),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Available services', style: tt.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            _PortalCard(
+              icon: AppIcons.announcements,
+              title: 'Community announcements',
+              body: 'Read building notices, facility updates, and alerts.',
+              actionLabel: 'Open',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
               ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _PortalCard(
+              icon: AppIcons.applyForResident,
+              title: 'Resident access',
+              body: _hasPendingRequest
+                  ? 'Your current access request is under review.'
+                  : 'Apply with your unit number to unlock resident services.',
+              actionLabel: _hasPendingRequest ? 'Pending' : 'Apply',
+              onTap: _hasPendingRequest
+                  ? null
+                  : () => _openResidentApplication(context),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _PortalCard(
+              icon: AppIcons.visitorPass,
+              title: 'Visitor and household services',
+              body:
+                  'Verified residents can register guests and issue gate QR passes.',
+              actionLabel: 'Resident only',
+              onTap: null,
+            ),
           ],
         ),
       ),
@@ -131,38 +134,40 @@ class _PublicHomeTab extends StatelessWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String body;
-
-  const _InfoCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-  });
+class _AccessCard extends StatelessWidget {
+  const _AccessCard();
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     return Card(
+      color: cs.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: cs.primary),
+            CircleAvatar(
+              backgroundColor: cs.primary,
+              child: Icon(AppIcons.profile, color: cs.onPrimary),
+            ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: tt.titleSmall),
-                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    body,
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                    'Public portal access',
+                    style: tt.titleMedium?.copyWith(
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Apply for resident access when you are ready to verify a unit.',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onPrimaryContainer.withValues(alpha: 0.78),
+                    ),
                   ),
                 ],
               ),
@@ -174,27 +179,85 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-class _ApplyCard extends StatelessWidget {
-  final VoidCallback onTap;
+class _PendingRequestCard extends StatelessWidget {
+  final AppUser user;
 
-  const _ApplyCard({required this.onTap});
+  const _PendingRequestCard({required this.user});
 
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
+    const title = 'Resident access under review';
+    final body =
+        'Management is reviewing your unit claim ${user.requestedUnit ?? ""}.';
+
     return Card(
-      color: cs.primaryContainer,
+      color: cs.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Row(
+          children: [
+            Icon(AppIcons.pending, color: cs.onSecondaryContainer),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: tt.titleMedium?.copyWith(
+                      color: cs.onSecondaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    body,
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSecondaryContainer.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PortalCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  final String actionLabel;
+  final VoidCallback? onTap;
+
+  const _PortalCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final enabled = onTap != null;
+    return Card(
       child: InkWell(
         onTap: onTap,
         borderRadius: AppRadius.mdBr,
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.lg),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Row(
             children: [
               Icon(
-                AppIcons.applyForResident,
-                color: cs.onPrimaryContainer,
+                icon,
+                color: enabled ? cs.primary : cs.onSurfaceVariant,
                 size: 32,
               ),
               const SizedBox(width: AppSpacing.md),
@@ -202,22 +265,23 @@ class _ApplyCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Apply for Resident Access',
-                      style: tt.titleMedium
-                          ?.copyWith(color: cs.onPrimaryContainer),
-                    ),
+                    Text(title, style: tt.titleSmall),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Live here? Get verified for unit-based features.',
-                      style: tt.bodySmall
-                          ?.copyWith(color: cs.onPrimaryContainer),
+                      body,
+                      style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
               ),
-              Icon(AppIcons.arrowRight,
-                  size: 16, color: cs.onPrimaryContainer),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                actionLabel,
+                style: tt.labelMedium?.copyWith(
+                  color: enabled ? cs.primary : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),

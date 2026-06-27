@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Device-local user preferences: chosen UI language and notification
-/// toggles.
+/// Device-local UI language preference.
 ///
 /// ─── WHY THIS IS NOT IN FIRESTORE ──────────────────────────────────
 /// These are presentation/device preferences, not security or domain
@@ -17,17 +16,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Read it anywhere via [SettingsScope.of].
 class AppSettings extends ChangeNotifier {
   static const _kLocaleCode = 'settings.localeCode';
-  static const _kPushNotifications = 'settings.notifications.push';
-  static const _kEmailNotifications = 'settings.notifications.email';
-  static const _kAnnouncementNotifications =
-      'settings.notifications.announcements';
 
   /// Languages the app ships translations for. Keep in lockstep with the
   /// .arb files in lib/l10n and AppLocalizations.supportedLocales.
-  static const List<Locale> supportedLocales = [
-    Locale('en'),
-    Locale('ms'),
-  ];
+  static const List<Locale> supportedLocales = [Locale('en'), Locale('ms')];
 
   final SharedPreferences _prefs;
 
@@ -59,28 +51,6 @@ class AppSettings extends ChangeNotifier {
   }
 
   // ── Notification preferences ────────────────────────────────────────
-  // Default to on: a resident who never opens this screen still gets the
-  // alerts they'd reasonably expect.
-
-  bool get pushNotifications => _prefs.getBool(_kPushNotifications) ?? true;
-  bool get emailNotifications => _prefs.getBool(_kEmailNotifications) ?? true;
-  bool get announcementNotifications =>
-      _prefs.getBool(_kAnnouncementNotifications) ?? true;
-
-  Future<void> setPushNotifications(bool value) async {
-    await _prefs.setBool(_kPushNotifications, value);
-    notifyListeners();
-  }
-
-  Future<void> setEmailNotifications(bool value) async {
-    await _prefs.setBool(_kEmailNotifications, value);
-    notifyListeners();
-  }
-
-  Future<void> setAnnouncementNotifications(bool value) async {
-    await _prefs.setBool(_kAnnouncementNotifications, value);
-    notifyListeners();
-  }
 }
 
 /// Exposes the single [AppSettings] instance to the widget tree.
@@ -99,8 +69,7 @@ class SettingsScope extends InheritedNotifier<AppSettings> {
   }) : super(notifier: settings);
 
   static AppSettings of(BuildContext context) {
-    final scope =
-        context.dependOnInheritedWidgetOfExactType<SettingsScope>();
+    final scope = context.dependOnInheritedWidgetOfExactType<SettingsScope>();
     assert(scope != null, 'No SettingsScope found in the widget tree.');
     return scope!.notifier!;
   }

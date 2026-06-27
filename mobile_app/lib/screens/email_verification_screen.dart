@@ -90,24 +90,38 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   void _startResendCooldown() {
     setState(() => _resendCooldownSeconds = 60);
-    _resendCooldownTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (timer) {
-        if (_resendCooldownSeconds <= 1) {
-          timer.cancel();
-          if (mounted) setState(() => _resendCooldownSeconds = 0);
-        } else {
-          if (mounted) {
-            setState(() => _resendCooldownSeconds--);
-          }
+    _resendCooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        if (mounted) setState(() => _resendCooldownSeconds = 0);
+      } else {
+        if (mounted) {
+          setState(() => _resendCooldownSeconds--);
         }
-      },
-    );
+      }
+    });
   }
 
   Future<void> _handleSignOut() async {
     await _authService.signOut();
     // authStateChanges will handle routing back to Login.
+  }
+
+  Future<void> _continueToSignIn() async {
+    await _authService.reloadCurrentUser();
+    final user = _authService.currentUser;
+
+    if (user != null && !user.emailVerified) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verify your email before continuing to sign in.'),
+        ),
+      );
+      return;
+    }
+
+    await _handleSignOut();
   }
 
   @override
@@ -134,10 +148,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 const SizedBox(height: 24),
                 Text(
                   'Check your email',
-                  style:
-                      Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -159,6 +172,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ),
                 const SizedBox(height: 32),
 
+                FilledButton.icon(
+                  onPressed: _continueToSignIn,
+                  icon: const Icon(Icons.login_rounded),
+                  label: const Text('Continue to sign in'),
+                ),
+                const SizedBox(height: 8),
+
                 // Resend button with cooldown
                 OutlinedButton.icon(
                   onPressed: (_isResending || _resendCooldownSeconds > 0)
@@ -175,7 +195,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
                 TextButton(
                   onPressed: _handleSignOut,
-                  child: const Text('Use a different email (Sign out)'),
+                  child: const Text('Use a different email'),
                 ),
               ],
             ),

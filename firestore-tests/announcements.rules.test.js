@@ -38,6 +38,7 @@ const {
   assertFails,
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
+const { firestoreEmulatorOptions } = require('./test_environment');
 
 const {
   doc,
@@ -118,11 +119,7 @@ function seededDoc(overrides = {}) {
 before(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    firestore: {
-      host: '127.0.0.1',
-      port: 8080,
-      rules: readFileSync(RULES_PATH, 'utf8'),
-    },
+    firestore: firestoreEmulatorOptions(readFileSync(RULES_PATH, 'utf8')),
   });
 });
 

@@ -1,0 +1,95 @@
+<mxfile host="app.diagrams.net" modified="2026-06-26T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="data-processing-flow" name="Data Processing Flow">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="EV Charging Data Processing Flow" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#24292f;" vertex="1" parent="1">
+          <mxGeometry x="50" y="30" width="900" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="legend" value="This diagram shows how charging data moves from the mobile app and ESP32 device into Firebase, then back to the app as live status." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#57606a;" vertex="1" parent="1">
+          <mxGeometry x="50" y="72" width="860" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-user" value="User Side" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f8fa;strokeColor=#d0d7de;arcSize=6;fontStyle=1;fontSize=16;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="50" y="130" width="280" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-cloud" value="Cloud Processing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f8fa;strokeColor=#d0d7de;arcSize=6;fontStyle=1;fontSize=16;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="380" y="130" width="450" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="lane-device" value="IOT Device Side" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f6f8fa;strokeColor=#d0d7de;arcSize=6;fontStyle=1;fontSize=16;verticalAlign=top;spacingTop=14;" vertex="1" parent="1">
+          <mxGeometry x="880" y="130" width="430" height="640" as="geometry" />
+        </mxCell>
+        <mxCell id="mobile" value="Flutter Mobile App&lt;br&gt;&lt;br&gt;Resident sees station list, presses Start or Stop.&lt;br&gt;&lt;br&gt;Admin can add station, set offline, or end stuck session." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="190" width="220" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="auth" value="Firebase Auth&lt;br&gt;&lt;br&gt;Checks signed-in user, verified email, and role claim:&lt;br&gt;resident, admin, or superadmin." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7f5ff;strokeColor=#74b9ff;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="430" y="175" width="330" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="functions" value="Cloud Functions / Backend&lt;br&gt;&lt;br&gt;Processes app request:&lt;br&gt;startEvCharging(stationId)&lt;br&gt;stopEvCharging(stationId)&lt;br&gt;&lt;br&gt;Validates resident profile, unit number, station availability, and session owner." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="430" y="325" width="330" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="firestore" value="Firestore Database&lt;br&gt;&lt;br&gt;/ev_stations/{stationId}&lt;br&gt;status: available, inUse, offline&lt;br&gt;currentSessionId&lt;br&gt;&lt;br&gt;/ev_sessions/{sessionId}&lt;br&gt;userId, unitNumber, startedAt, endedAt, status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="430" y="540" width="330" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="esp32" value="ESP32 Charger Device&lt;br&gt;&lt;br&gt;Reads buttons and battery voltage.&lt;br&gt;Controls GPIO26 charger demo output.&lt;br&gt;Sends telemetry and session events." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="920" y="190" width="350" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-device" value="Device API / IOT Bridge&lt;br&gt;&lt;br&gt;Receives ESP32 telemetry.&lt;br&gt;Sends start / stop commands to ESP32.&lt;br&gt;Keeps Firebase credentials away from the device." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8c5;strokeColor=#bf8700;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="920" y="375" width="350" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="hardware" value="Physical Output / Sensors&lt;br&gt;&lt;br&gt;GPIO18 Start button&lt;br&gt;GPIO19 Stop/reset button&lt;br&gt;GPIO23 Fault button&lt;br&gt;GPIO34 Battery ADC&lt;br&gt;GPIO2 Status LED&lt;br&gt;GPIO26 Demo charger output" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;arcSize=8;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="920" y="575" width="350" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="process-note" value="Main database change&lt;br&gt;&lt;br&gt;Start charging:&lt;br&gt;1. Create active ev_sessions document.&lt;br&gt;2. Change ev_stations status from available to inUse.&lt;br&gt;3. Store currentSessionId.&lt;br&gt;&lt;br&gt;Stop charging:&lt;br&gt;1. Mark ev_sessions status completed.&lt;br&gt;2. Set endedAt server timestamp.&lt;br&gt;3. Change ev_stations status back to available." style="shape=note;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="430" width="220" height="245" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" value="Start / Stop request" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#57606a;fontSize=11;" edge="1" parent="1" source="mobile" target="auth">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="verified user + role" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#57606a;fontSize=11;" edge="1" parent="1" source="auth" target="functions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="transaction write" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#57606a;fontSize=11;" edge="1" parent="1" source="functions" target="firestore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="live station/session stream" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0969da;fontSize=11;dashed=1;" edge="1" parent="1" source="firestore" target="mobile">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="595" y="745" />
+              <mxPoint x="190" y="745" />
+              <mxPoint x="190" y="330" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e5" value="future command: start / stop session" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#bf8700;fontSize=11;dashed=1;" edge="1" parent="1" source="functions" target="backend-device">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="device command" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#bf8700;fontSize=11;dashed=1;" edge="1" parent="1" source="backend-device" target="esp32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="telemetry / fault / session ended" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#bf8700;fontSize=11;dashed=1;" edge="1" parent="1" source="esp32" target="backend-device">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1290" y="255" />
+              <mxPoint x="1290" y="442" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" value="safe database update" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#bf8700;fontSize=11;dashed=1;" edge="1" parent="1" source="backend-device" target="firestore">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="read sensors / switch output" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#57606a;fontSize=11;" edge="1" parent="1" source="esp32" target="hardware">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="button + voltage input" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#57606a;fontSize=11;" edge="1" parent="1" source="hardware" target="esp32">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1290" y="650" />
+              <mxPoint x="1290" y="255" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

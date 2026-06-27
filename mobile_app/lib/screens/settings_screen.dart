@@ -1,16 +1,65 @@
 import 'package:flutter/material.dart';
+
 import '../l10n/app_localizations.dart';
-import 'help_center_screen.dart';
-import 'notifications_settings_screen.dart';
-import 'privacy_security_screen.dart';
+import '../services/app_settings.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import 'help_center_screen.dart';
+import 'privacy_security_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   void _open(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  }
+
+  Future<void> _chooseLanguage(BuildContext context) async {
+    final l10n = AppLocalizations.of(context);
+    final settings = SettingsScope.of(context);
+    final selected = await showModalBottomSheet<Locale>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            0,
+            AppSpacing.lg,
+            AppSpacing.lg,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                l10n.languageTitle,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(l10n.languageSubtitle),
+              const SizedBox(height: AppSpacing.md),
+              _LanguageOption(
+                label: l10n.languageEnglish,
+                selected: settings.locale.languageCode == 'en',
+                onTap: () => Navigator.of(sheetContext).pop(const Locale('en')),
+              ),
+              _LanguageOption(
+                label: l10n.languageMalay,
+                selected: settings.locale.languageCode == 'ms',
+                onTap: () => Navigator.of(sheetContext).pop(const Locale('ms')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !context.mounted) return;
+    await settings.setLocale(selected);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context).languageUpdated)),
+    );
   }
 
   @override
@@ -24,9 +73,9 @@ class SettingsScreen extends StatelessWidget {
         children: [
           _SectionHeader(title: l10n.settingsSectionGeneral),
           _SettingTile(
-            icon: AppIcons.notificationsOutlined,
-            title: l10n.settingsNotifications,
-            onTap: () => _open(context, const NotificationsSettingsScreen()),
+            icon: Icons.language_rounded,
+            title: l10n.settingsLanguage,
+            onTap: () => _chooseLanguage(context),
           ),
           _SettingTile(
             icon: AppIcons.lockOutlined,
@@ -43,79 +92,12 @@ class SettingsScreen extends StatelessWidget {
           _SettingTile(
             icon: AppIcons.info,
             title: l10n.settingsAbout,
-            onTap: () => _showAboutDialog(context, l10n),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Account section. Strings are hardcoded (no l10n keys): the
-          // localization system is intentionally left untouched this phase.
-          const _SectionHeader(title: 'Account'),
-          _SettingTile(
-            icon: Icons.delete_outline_rounded,
-            title: 'Delete account',
-            onTap: () => _showDeleteAccountDialog(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// A deliberately minimal "About" dialog.
-  ///
-  /// ─── SECURITY: NO VERSION, NO BUNDLED LICENSE LIST ─────────────────
-  /// We do NOT use Flutter's [showAboutDialog]. That helper exposes the
-  /// app version/build and a "View licenses" page enumerating every
-  /// bundled open-source package. For a security-focused residential app
-  /// that is needless information disclosure: build/version strings and
-  /// the full dependency inventory help an attacker fingerprint the app
-  /// and look up known CVEs. End users gain nothing from it. This dialog
-  /// shows only the product name, purpose, and copyright. (This is why
-  /// Settings deliberately does NOT surface an app-version row.)
-  /// ────────────────────────────────────────────────────────────────────
-  void _showAboutDialog(BuildContext context, AppLocalizations l10n) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(l10n.aboutTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l10n.aboutDescription,
-              style: Theme.of(ctx).textTheme.bodyMedium,
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: l10n.appTitle,
+              applicationLegalese:
+                  'Copyright ${DateTime.now().year} ${l10n.aboutCopyright}',
             ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              '© ${DateTime.now().year} ${l10n.aboutCopyright}',
-              style: Theme.of(ctx).textTheme.bodySmall,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(l10n.actionClose),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Placeholder only — no action is wired. Self-service account deletion
-  /// is out of scope for this phase.
-  void _showDeleteAccountDialog(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete account'),
-        content: const Text(
-          "Account deletion isn't available yet. Please contact the "
-          'management office if you need your account removed.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
           ),
         ],
       ),
@@ -123,7 +105,29 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-/// Small uppercase label that groups the settings list into sections.
+class _LanguageOption extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _LanguageOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.mdBr),
+      leading: Icon(selected ? Icons.check_circle : Icons.circle_outlined),
+      title: Text(label),
+      selected: selected,
+      onTap: onTap,
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final String title;
 
@@ -139,9 +143,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              letterSpacing: 0.8,
-            ),
+          color: AppColors.onSurfaceVariant,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }

@@ -7,14 +7,15 @@ import 'models/app_user.dart';
 import 'models/auth_identity.dart';
 import 'services/app_settings.dart';
 import 'services/auth_service.dart';
+import 'services/firebase_emulator_config.dart';
 import 'services/user_repository.dart';
 import 'screens/login_screen.dart';
 import 'screens/email_verification_screen.dart';
 import 'screens/complete_profile_screen.dart';
 import 'screens/awaiting_approval_screen.dart';
-import 'screens/awaiting_superadmin_approval_screen.dart';
 import 'screens/admin_home_screen.dart';
 import 'screens/superadmin_home_screen.dart';
+import 'screens/staff_home_screen.dart';
 import 'screens/public_home_screen.dart';
 import 'screens/resident_home_screen.dart';
 import 'theme/app_theme.dart';
@@ -22,9 +23,8 @@ import 'theme/app_theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await FirebaseEmulatorConfig.configure();
 
   // Load saved preferences (language, notification toggles) before the
   // first frame so the UI opens in the user's chosen language.
@@ -87,26 +87,20 @@ class AuthGate extends StatelessWidget {
           return const EmailVerificationScreen();
         }
 
-        // ─── PRIVILEGED ROLES ARE CLAIM-DRIVEN ──────────────────────────
-        // The {role} custom claim is the authorization boundary: signed
-        // into the JWT, settable only server-side. Route superadmin and
-        // admin straight from the claim — never from the Firestore profile
-        // — so a tampered users/{uid}.role can't reach an admin surface.
-        // Server-side checks (Firestore rules + approval backend) still
-        // gate every privileged action; this is routing only.
+        // ─── OUT-OF-BAND CLAIM ROLES ────────────────────────────────────
+        // The genesis superadmin and gate staff are provisioned out of band
+        // with signed custom claims. Administrators are resolved below from a
+        // Firestore profile role that only the superadmin can change.
         if (identity.role == UserRole.superadmin) {
-          return const SuperadminHomeScreen();
+          return SuperadminHomeScreen(identity: identity);
         }
-        if (identity.role == UserRole.admin) {
-          return const AdminHomeScreen();
+        if (identity.role == UserRole.staff) {
+          return StaffHomeScreen(identity: identity);
         }
 
-        // ─── UNPRIVILEGED BUCKET (resident / public / no claim) ─────────
-        // Resident verification and pending/suspended workflow live in
-        // Firestore, so consult the profile for these non-escalating
-        // routes. Residents gain a {role:'resident'} claim only once the
-        // approval backend lands in a later phase; until then they route
-        // here by profile, which is safe — no admin surface is exposed.
+        // ─── PROFILE-DRIVEN ROLES AND LIFECYCLE ─────────────────────────
+        // All remaining role and lifecycle routing comes from the protected
+        // Firestore profile. Rules prevent owners from changing role/status.
         return StreamBuilder<AppUser?>(
           stream: userRepository.watchUserProfile(identity.uid),
           builder: (context, profileSnapshot) {
@@ -124,16 +118,21 @@ class AuthGate extends StatelessWidget {
               return const _SuspendedPlaceholder();
             }
 
-            // Admin applicant awaiting a superadmin's decision (Phase B).
-            if (profile.requestedRole == UserRole.admin &&
-                profile.status == UserStatus.pendingApproval) {
-              return const AwaitingSuperadminApprovalScreen();
-            }
-
             // Any other pending applicant — a resident signup OR a public
             // user who applied to upgrade — waits on the admin queue.
             if (profile.status == UserStatus.pendingApproval) {
               return const AwaitingApprovalScreen();
+            }
+
+            // Only the claim-authenticated superadmin can assign this protected
+            // profile role. Firestore rules prevent self-promotion.
+            if (profile.role == UserRole.admin &&
+                profile.status == UserStatus.active) {
+              return AdminHomeScreen(identity: identity);
+            }
+
+            if (profile.role == UserRole.superadmin) {
+              return const _PrivilegedClaimRefreshScreen();
             }
 
             // Active, verified resident.
@@ -147,6 +146,85 @@ class AuthGate extends StatelessWidget {
           },
         );
       },
+    );
+  }
+}
+
+class _PrivilegedClaimRefreshScreen extends StatelessWidget {
+  const _PrivilegedClaimRefreshScreen();
+
+  Future<void> _refresh(BuildContext context) async {
+    try {
+      await AuthService().refreshCurrentUserClaims();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Access refreshed.')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not refresh access: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Refresh Access'),
+        automaticallyImplyLeading: false,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(
+                  Icons.admin_panel_settings_rounded,
+                  size: 72,
+                  color: cs.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Your access was updated',
+                  textAlign: TextAlign.center,
+                  style: tt.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Refresh your session to load the signed admin claim and '
+                  'open the correct dashboard.',
+                  textAlign: TextAlign.center,
+                  style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: () => _refresh(context),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Refresh access'),
+                ),
+                const SizedBox(height: 8),
+                TextButton.icon(
+                  onPressed: () => AuthService().signOut(),
+                  icon: const Icon(Icons.logout_rounded),
+                  label: const Text('Sign out'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -167,11 +245,7 @@ class _SuspendedPlaceholder extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                Icons.block,
-                size: 80,
-                color: Colors.red.shade700,
-              ),
+              Icon(Icons.block, size: 80, color: Colors.red.shade700),
               const SizedBox(height: 16),
               Text(
                 'Your account has been suspended',
@@ -216,9 +290,9 @@ class _SplashScreen extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'Residential Hub',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
             const CircularProgressIndicator(),

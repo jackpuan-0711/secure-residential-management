@@ -58,6 +58,7 @@ abstract final class AppIcons {
   static const IconData info = Icons.info_rounded;
   static const IconData arrowRight = Icons.arrow_forward_ios_rounded;
   static const IconData add = Icons.add_rounded;
+  static const IconData pinned = Icons.push_pin_rounded;
   static const IconData close = Icons.close_rounded;
   static const IconData lock = Icons.lock_rounded;
   static const IconData lockOutlined = Icons.lock_outline_rounded;

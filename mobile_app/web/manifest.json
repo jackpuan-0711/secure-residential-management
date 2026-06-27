@@ -1,11 +1,11 @@
 {
-    "name": "residential_app",
-    "short_name": "residential_app",
+    "name": "Residential Hub",
+    "short_name": "Residential Hub",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#2457C5",
+    "description": "Secure residential services and property operations.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

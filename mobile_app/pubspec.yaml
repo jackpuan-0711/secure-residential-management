@@ -1,5 +1,5 @@
 name: mobile_app
-description: "A new Flutter project."
+description: "Secure residential operations for residents, visitors, and management staff."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -49,6 +49,13 @@ dependencies:
   # toggles). These are device preferences, NOT security state — security
   # state lives in Firebase Auth / Firestore.
   shared_preferences: ^2.3.0
+
+  # Renders the visitor-pass capability token as a scannable QR code. The QR
+  # carries ONLY the opaque token (VisitorInvitation.qrPayload) — never visitor
+  # PII — so this is a presentation dependency, not a security boundary.
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
+  cloud_functions: ^6.3.3
 
 dev_dependencies:
   flutter_test:

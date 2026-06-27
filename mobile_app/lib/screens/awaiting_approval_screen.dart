@@ -10,9 +10,8 @@
 /// (role → public, status → active). The AuthGate StreamBuilder detects
 /// the change and re-routes automatically.
 ///
-/// NOTE: there is intentionally NO email/push notification on approval in
-/// this phase — that requires the deferred Flask grant endpoint. The user
-/// learns the outcome by re-opening the app (the router re-routes them).
+/// The profile stream routes the user immediately when a decision lands, or
+/// on their next launch if the app was closed. No push delivery is implied.
 ///
 /// While pending, the user may "Continue browsing as public" — public
 /// features stay available; Firestore rules enforce that a pending user

@@ -80,6 +80,7 @@ class VisitorInvitation {
 
   final String visitorName;
   final String visitorContact;
+  final int guestCount;
 
   /// Optional vehicle registration, if the visitor is driving in.
   final String? vehiclePlate;
@@ -98,19 +99,44 @@ class VisitorInvitation {
   /// stored [status]; see [isCurrentlyValid].
   final DateTime expiresAt;
 
+  /// Immutable audit metadata written during lifecycle transitions.
+  final DateTime? cancelledAt;
+  final String? cancelledBy;
+  final DateTime? checkedInAt;
+  final String? checkedInBy;
+  final DateTime? checkedOutAt;
+  final String? checkedOutBy;
+
   const VisitorInvitation({
     required this.invitationId,
     required this.residentId,
     required this.unitNumber,
     required this.visitorName,
     required this.visitorContact,
+    this.guestCount = 1,
     this.vehiclePlate,
     required this.visitDate,
     required this.eta,
     required this.status,
     required this.createdAt,
     required this.expiresAt,
+    this.cancelledAt,
+    this.cancelledBy,
+    this.checkedInAt,
+    this.checkedInBy,
+    this.checkedOutAt,
+    this.checkedOutBy,
   });
+
+  /// Start of the scheduled visit day in the device's local timezone.
+  DateTime get validFrom =>
+      DateTime(visitDate.year, visitDate.month, visitDate.day);
+
+  bool get isUpcoming =>
+      status == VisitorPassStatus.active && DateTime.now().isBefore(validFrom);
+
+  bool get isExpired =>
+      status == VisitorPassStatus.active && !DateTime.now().isBefore(expiresAt);
 
   /// The exact payload encoded into the QR code.
   ///
@@ -123,26 +149,49 @@ class VisitorInvitation {
   /// its validity window. This is the single source of truth the UI should
   /// consult: it fails closed once [expiresAt] passes even if the stored
   /// status has not yet been swept to [VisitorPassStatus.expired].
-  bool get isCurrentlyValid =>
-      status == VisitorPassStatus.active && DateTime.now().isBefore(expiresAt);
+  bool get isCurrentlyValid {
+    final now = DateTime.now();
+    return status == VisitorPassStatus.active &&
+        !now.isBefore(validFrom) &&
+        now.isBefore(expiresAt);
+  }
 
   /// Serialises to a Firestore map. DateTimes become [Timestamp]s.
   ///
   /// The document ID ([invitationId]) is deliberately NOT included: it is the
   /// document key, not a field, so the token is never duplicated inside the
   /// payload.
+  ///
+  /// NOTE: [VisitorRepository.createInvitation] OVERRIDES the `createdAt` entry
+  /// of this map with [FieldValue.serverTimestamp] so the issue time is
+  /// server-authoritative (never the forgeable client clock) — mirroring the
+  /// announcements module. The [createdAt] value carried by this object is only
+  /// a pre-write placeholder.
   Map<String, dynamic> toMap() {
     return {
       'residentId': residentId,
       'unitNumber': unitNumber,
       'visitorName': visitorName,
       'visitorContact': visitorContact,
+      'guestCount': guestCount,
       'vehiclePlate': vehiclePlate,
       'visitDate': Timestamp.fromDate(visitDate),
       'eta': eta,
       'status': status.asString,
       'createdAt': Timestamp.fromDate(createdAt),
       'expiresAt': Timestamp.fromDate(expiresAt),
+      'cancelledAt': cancelledAt == null
+          ? null
+          : Timestamp.fromDate(cancelledAt!),
+      'cancelledBy': cancelledBy,
+      'checkedInAt': checkedInAt == null
+          ? null
+          : Timestamp.fromDate(checkedInAt!),
+      'checkedInBy': checkedInBy,
+      'checkedOutAt': checkedOutAt == null
+          ? null
+          : Timestamp.fromDate(checkedOutAt!),
+      'checkedOutBy': checkedOutBy,
     };
   }
 
@@ -159,12 +208,26 @@ class VisitorInvitation {
       unitNumber: data['unitNumber'] as String,
       visitorName: data['visitorName'] as String,
       visitorContact: data['visitorContact'] as String,
+      guestCount: data['guestCount'] as int? ?? 1,
       vehiclePlate: data['vehiclePlate'] as String?,
       visitDate: (data['visitDate'] as Timestamp).toDate(),
       eta: data['eta'] as String,
       status: VisitorPassStatusX.fromString((data['status'] as String?) ?? ''),
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      // createdAt is written as FieldValue.serverTimestamp(); during Firestore's
+      // latency-compensation / pending-write window the author's OWN local
+      // snapshot momentarily sees it as null before the server value resolves.
+      // Tolerate that transient null (→ DateTime.now()) rather than throw — the
+      // fallback is never persisted and reconciles on the next snapshot. Mirrors
+      // Announcement.fromFirestore's postedAt handling. visitDate / expiresAt
+      // stay strict: they are always client-set and present.
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       expiresAt: (data['expiresAt'] as Timestamp).toDate(),
+      cancelledAt: (data['cancelledAt'] as Timestamp?)?.toDate(),
+      cancelledBy: data['cancelledBy'] as String?,
+      checkedInAt: (data['checkedInAt'] as Timestamp?)?.toDate(),
+      checkedInBy: data['checkedInBy'] as String?,
+      checkedOutAt: (data['checkedOutAt'] as Timestamp?)?.toDate(),
+      checkedOutBy: data['checkedOutBy'] as String?,
     );
   }
 
@@ -182,12 +245,19 @@ class VisitorInvitation {
       unitNumber: unitNumber,
       visitorName: visitorName,
       visitorContact: visitorContact,
+      guestCount: guestCount,
       vehiclePlate: vehiclePlate,
       visitDate: visitDate,
       eta: eta,
       status: status ?? this.status,
       createdAt: createdAt,
       expiresAt: expiresAt,
+      cancelledAt: cancelledAt,
+      cancelledBy: cancelledBy,
+      checkedInAt: checkedInAt,
+      checkedInBy: checkedInBy,
+      checkedOutAt: checkedOutAt,
+      checkedOutBy: checkedOutBy,
     );
   }
 

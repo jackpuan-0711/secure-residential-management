@@ -82,20 +82,19 @@ class _PendingResidentsListState extends State<PendingResidentsList> {
   Future<void> _approve(AppUser user) async {
     final confirmed = await _confirm(
       title: 'Approve resident?',
-      message: 'Promote ${user.name} to a verified resident of '
+      message:
+          'Promote ${user.name} to a verified resident of '
           '${user.requestedUnit ?? "—"}. This grants unit-scoped privileges.',
       actionLabel: 'Approve',
       destructive: false,
     );
     if (!confirmed || !mounted) return;
 
-    final approverUid = _auth.currentUser?.uid;
-    if (approverUid == null) {
-      _toast('Not signed in.', isError: true);
-      return;
-    }
-
     try {
+      final approverUid = _auth.currentUser?.uid;
+      if (approverUid == null) {
+        throw const UserRepositoryException('Please sign in again.');
+      }
       await _repo.approveResident(
         targetUid: user.uid,
         approvedByUid: approverUid,
@@ -118,16 +117,14 @@ class _PendingResidentsListState extends State<PendingResidentsList> {
     );
     if (!confirmed || !mounted) return;
 
-    final rejecterUid = _auth.currentUser?.uid;
-    if (rejecterUid == null) {
-      _toast('Not signed in.', isError: true);
-      return;
-    }
-
     try {
+      final approverUid = _auth.currentUser?.uid;
+      if (approverUid == null) {
+        throw const UserRepositoryException('Please sign in again.');
+      }
       await _repo.rejectAsPublic(
         targetUid: user.uid,
-        rejectedByUid: rejecterUid,
+        rejectedByUid: approverUid,
       );
       if (mounted) _toast('Rejected ${user.name}.');
     } catch (e) {
@@ -169,10 +166,7 @@ class _PendingResidentsListState extends State<PendingResidentsList> {
   void _toast(String text, {bool isError = false}) {
     final cs = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: isError ? cs.error : null,
-      ),
+      SnackBar(content: Text(text), backgroundColor: isError ? cs.error : null),
     );
   }
 }

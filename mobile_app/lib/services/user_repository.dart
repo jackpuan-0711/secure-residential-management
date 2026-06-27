@@ -29,13 +29,14 @@ class UserRepository {
   final FirebaseFirestore _firestore;
 
   UserRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  CollectionReference<AppUser> get _usersRef =>
-      _firestore.collection('users').withConverter<AppUser>(
-            fromFirestore: AppUser.fromFirestore,
-            toFirestore: (user, _) => user.toFirestore(),
-          );
+  CollectionReference<AppUser> get _usersRef => _firestore
+      .collection('users')
+      .withConverter<AppUser>(
+        fromFirestore: AppUser.fromFirestore,
+        toFirestore: (user, _) => user.toFirestore(),
+      );
 
   // ═══════════════════════════════════════════════════════════════
   // CREATE
@@ -72,6 +73,7 @@ class UserRepository {
       'name': name,
       'role': UserRole.resident.toFirestoreValue(),
       'status': UserStatus.pendingApproval.toFirestoreValue(),
+      'requestedRole': null,
       'requestedUnit': requestedUnit,
       'unitNumber': null,
       'phoneNumber': null,
@@ -133,6 +135,7 @@ class UserRepository {
       'name': name,
       'role': UserRole.public.toFirestoreValue(),
       'status': UserStatus.active.toFirestoreValue(),
+      'requestedRole': null,
       'requestedUnit': null,
       'unitNumber': null,
       'phoneNumber': null,
@@ -161,16 +164,12 @@ class UserRepository {
   /// subscribing to docs that don't exist at subscribe-time. Real
   /// Firestore behavior is identical under both paths.
   Stream<AppUser?> watchUserProfile(String uid) {
-    return _firestore
-        .collection('users')
-        .doc(uid)
-        .snapshots()
-        .map((snapshot) {
+    return _firestore.collection('users').doc(uid).snapshots().map((snapshot) {
       if (!snapshot.exists) return null;
       return AppUser.fromFirestore(snapshot, null);
     });
   }
-  
+
   // ═══════════════════════════════════════════════════════════════
   // UPDATE — self-service profile edits
   // ═══════════════════════════════════════════════════════════════
@@ -189,13 +188,18 @@ class UserRepository {
     required String uid,
     String? name,
     String? phoneNumber,
+    bool clearPhoneNumber = false,
   }) async {
     final updates = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
     if (name != null) updates['name'] = name;
-    if (phoneNumber != null) updates['phoneNumber'] = phoneNumber;
+    if (clearPhoneNumber) {
+      updates['phoneNumber'] = null;
+    } else if (phoneNumber != null) {
+      updates['phoneNumber'] = phoneNumber;
+    }
 
     if (updates.length == 1) {
       throw const UserRepositoryException(
@@ -388,6 +392,7 @@ class UserRepository {
       tx.update(docRef, {
         'role': UserRole.public.toFirestoreValue(),
         'status': UserStatus.active.toFirestoreValue(),
+        'requestedRole': null,
         'requestedUnit': null,
         'rejectedAt': FieldValue.serverTimestamp(),
         'rejectedBy': rejectedByUid,
@@ -402,8 +407,10 @@ class UserRepository {
     DocumentSnapshot? startAfter,
   }) async {
     Query<AppUser> query = _usersRef
-        .where('status',
-            isEqualTo: UserStatus.pendingApproval.toFirestoreValue())
+        .where(
+          'status',
+          isEqualTo: UserStatus.pendingApproval.toFirestoreValue(),
+        )
         .orderBy('createdAt', descending: true)
         .limit(limit);
 
@@ -440,17 +447,115 @@ class UserRepository {
   Stream<List<AppUser>> listPendingResidents() {
     return _firestore
         .collection('users')
-        .where('status',
-            isEqualTo: UserStatus.pendingApproval.toFirestoreValue())
+        .where(
+          'status',
+          isEqualTo: UserStatus.pendingApproval.toFirestoreValue(),
+        )
         .orderBy('createdAt')
         .snapshots()
         .map(
           (snap) => snap.docs
               .map((d) => AppUser.fromFirestore(d, null))
-              .where((u) =>
-                  u.role == UserRole.resident ||
-                  u.requestedRole == UserRole.resident)
+              .where(
+                (u) =>
+                    u.role == UserRole.resident ||
+                    u.requestedRole == UserRole.resident,
+              )
               .toList(),
         );
+  }
+
+  /// Live stream of active administrators for the superadmin console.
+  /// Role changes are performed by callable functions because the Firebase
+  /// Auth custom claim is the authorization boundary.
+  Stream<List<AppUser>> listAdmins() {
+    return _firestore
+        .collection('users')
+        .where('role', isEqualTo: UserRole.admin.name)
+        .snapshots()
+        .map((snap) {
+          final admins = snap.docs
+              .map((d) => AppUser.fromFirestore(d, null))
+              .where((u) => u.status == UserStatus.active)
+              .toList();
+          admins.sort((a, b) => a.name.compareTo(b.name));
+          return admins;
+        });
+  }
+
+  Future<List<AppUser>> listAdminCandidates() async {
+    final snapshot = await _firestore
+        .collection('users')
+        .where('role', isEqualTo: UserRole.public.name)
+        .get();
+    final users = snapshot.docs
+        .map((doc) => AppUser.fromFirestore(doc, null))
+        .where((user) => user.status == UserStatus.active)
+        .toList();
+    users.sort((a, b) => a.name.compareTo(b.name));
+    return users;
+  }
+
+  Future<void> addAdmin({
+    required String targetUid,
+    required String approvedByUid,
+  }) async {
+    if (targetUid == approvedByUid) {
+      throw const UserRepositoryException(
+        'You cannot change your own superadmin access.',
+      );
+    }
+
+    final ref = _firestore.collection('users').doc(targetUid);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      if (!snapshot.exists) {
+        throw const UserRepositoryException('Account not found.');
+      }
+      final data = snapshot.data()!;
+      if (data['role'] != UserRole.public.name ||
+          data['status'] != UserStatus.active.toFirestoreValue()) {
+        throw const UserRepositoryException(
+          'Only an active public account can become an administrator.',
+        );
+      }
+
+      transaction.update(ref, {
+        'role': UserRole.admin.name,
+        'approvedAt': FieldValue.serverTimestamp(),
+        'approvedBy': approvedByUid,
+        'adminRemovedAt': null,
+        'adminRemovedBy': null,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  Future<void> removeAdmin({
+    required String targetUid,
+    required String removedByUid,
+  }) async {
+    if (targetUid == removedByUid) {
+      throw const UserRepositoryException(
+        'You cannot remove your own superadmin access.',
+      );
+    }
+
+    final ref = _firestore.collection('users').doc(targetUid);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      if (!snapshot.exists || snapshot.data()?['role'] != UserRole.admin.name) {
+        throw const UserRepositoryException('Administrator not found.');
+      }
+
+      transaction.update(ref, {
+        'role': UserRole.public.name,
+        'approvedAt': null,
+        'approvedBy': null,
+        'adminRemovedAt': FieldValue.serverTimestamp(),
+        'adminRemovedBy': removedByUid,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 }

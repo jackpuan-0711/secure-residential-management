@@ -13,6 +13,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isVerifiedEmail() {
+      return request.auth != null
+          && request.auth.token.email_verified == true;
+    }
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function hasSuperadminAccess() {
+      return isVerifiedEmail()
+          && request.auth.token.role == 'superadmin';
+    }
+    function hasAdminAccess() {
+      return isVerifiedEmail()
+          && (hasSuperadminAccess()
+              // Backward compatibility for claim-based admins created before
+              // profiles became authoritative. Once a profile exists, its
+              // current role always wins, so removal is immediate.
+              || (request.auth.token.role == 'admin'
+                  && !exists(/databases/$(database)/documents/users/$(request.auth.uid)))
+              || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+                  && callerProfile().role == 'admin'
+                  && callerProfile().status == 'active'));
+    }
+    function hasGateAccess() {
+      return isVerifiedEmail()
+          && (request.auth.token.role == 'staff' || hasAdminAccess());
+    }
+
     // ═════════════════════════════════════════════════════════════════
     // /users/{uid} — Firestore mirror of the authenticated session.
     // ═════════════════════════════════════════════════════════════════
@@ -26,9 +54,7 @@ service cloud.firestore {
         return isSignedIn() && request.auth.uid == uid;
       }
       function hasAdminClaim() {
-        return isSignedIn()
-            && request.auth.token.email_verified == true
-            && request.auth.token.role in ['admin', 'superadmin'];
+        return hasAdminAccess();
       }
       function existing() { return resource.data; }
       function incoming() { return request.resource.data; }
@@ -38,7 +64,6 @@ service cloud.firestore {
       function affectedKeys() {
         return incoming().diff(existing()).affectedKeys();
       }
-
       // ── READ ───────────────────────────────────────────────────────
       // Self can read self. Admin / superadmin (claim + verified email)
       // can read any /users/{uid} — required for the pending-residents
@@ -62,7 +87,8 @@ service cloud.firestore {
         && incoming().uid == request.auth.uid
         && incoming().role in ['resident', 'public']
         && incoming().status in ['pending_approval', 'active']
-        && incoming().requestedRole == null
+        && (!incoming().keys().hasAny(['requestedRole'])
+            || incoming().requestedRole == null)
         && incoming().unitNumber == null
         && incoming().approvedAt == null
         && incoming().approvedBy == null
@@ -117,13 +143,68 @@ service cloud.firestore {
       // admins via raw Firestore writes.
       // Rationale: CWE-269 — the claim is the primary boundary, and
       // this rule is the defence-in-depth backstop.
-      allow update: if hasAdminClaim()
+      allow update: if hasAdminAccess()
         && request.auth.uid != uid
         && (
-             unchanged('role')
-             ||
-             (existing().role == 'resident' && incoming().role == 'public')
-           );
+          // Approve a pending resident application.
+          (existing().status == 'pending_approval'
+            && existing().role in ['public', 'resident']
+            && existing().requestedUnit is string
+            && incoming().role == 'resident'
+            && incoming().status == 'active'
+            && incoming().requestedRole == null
+            && incoming().requestedUnit == null
+            && incoming().unitNumber == existing().requestedUnit
+            && incoming().approvedAt == request.time
+            && incoming().approvedBy == request.auth.uid
+            && unchanged('rejectedAt')
+            && unchanged('rejectedBy')
+            && affectedKeys().hasOnly(
+                 ['role', 'status', 'requestedRole', 'requestedUnit',
+                  'unitNumber', 'approvedAt', 'approvedBy', 'updatedAt']))
+          ||
+          // Reject a pending resident application back to public access.
+          (existing().status == 'pending_approval'
+            && existing().role in ['public', 'resident']
+            && existing().requestedUnit is string
+            && incoming().role == 'public'
+            && incoming().status == 'active'
+            && incoming().requestedRole == null
+            && incoming().requestedUnit == null
+            && incoming().unitNumber == null
+            && incoming().rejectedAt == request.time
+            && incoming().rejectedBy == request.auth.uid
+            && unchanged('approvedAt')
+            && unchanged('approvedBy')
+            && affectedKeys().hasOnly(
+                 ['role', 'status', 'requestedRole', 'requestedUnit',
+                  'rejectedAt', 'rejectedBy', 'updatedAt']))
+          ||
+          // Only the genesis superadmin may add or remove administrators.
+          (hasSuperadminAccess()
+            && incoming().status == 'active'
+            && incoming().requestedRole == existing().requestedRole
+            && incoming().requestedUnit == existing().requestedUnit
+            && incoming().unitNumber == existing().unitNumber
+            && (
+              (existing().role == 'public'
+                && incoming().role == 'admin'
+                && incoming().approvedAt == request.time
+                && incoming().approvedBy == request.auth.uid
+                && incoming().adminRemovedAt == null
+                && incoming().adminRemovedBy == null)
+              ||
+              (existing().role == 'admin'
+                && incoming().role == 'public'
+                && incoming().approvedAt == null
+                && incoming().approvedBy == null
+                && incoming().adminRemovedAt == request.time
+                && incoming().adminRemovedBy == request.auth.uid)
+            )
+            && affectedKeys().hasOnly(
+                 ['role', 'approvedAt', 'approvedBy', 'adminRemovedAt',
+                  'adminRemovedBy', 'updatedAt']))
+        );
 
       // ── DELETE ─────────────────────────────────────────────────────
       // Never. The /users doc is an audit record (approvedBy,
@@ -142,6 +223,14 @@ service cloud.firestore {
     // never a Firestore mirror (CWE-269).
     // ═════════════════════════════════════════════════════════════════
     match /announcements/{id} {
+
+      function authorRoleIsValid() {
+        return (hasSuperadminAccess()
+                && request.resource.data.postedByRole == 'superadmin')
+            || (hasAdminAccess()
+                && !hasSuperadminAccess()
+                && request.resource.data.postedByRole == 'admin');
+      }
 
       // ── READ ───────────────────────────────────────────────────────
       // Any registered, email-verified user (resident / public / staff /
@@ -164,12 +253,12 @@ service cloud.firestore {
       //   • keys().hasOnly([...])                          — allowlist, rejects any extra field
       //                                                      (CWE-915 mass assignment), mirroring
       //                                                      the /users self-update allowlist
-      allow create: if request.auth.token.role in ['admin', 'superadmin']
+      allow create: if hasAdminAccess()
         // email_verified parity with the read gate and /users: an unverified
         // identity that cannot read must not write either.
         && request.auth.token.email_verified == true
         && request.resource.data.postedBy == request.auth.uid
-        && request.resource.data.postedByRole == request.auth.token.role
+        && authorRoleIsValid()
         && request.resource.data.postedAt == request.time
         && request.resource.data.priority in ['info', 'warning', 'critical']
         && request.resource.data.pinned is bool
@@ -193,8 +282,453 @@ service cloud.firestore {
       // Admin / superadmin only (claim-gated): moderation and the delete
       // half of the delete-and-repost correction flow. email_verified parity
       // with read/create — an unverified identity that can't read must not write.
-      allow delete: if request.auth.token.role in ['admin', 'superadmin']
-        && request.auth.token.email_verified == true;
+      allow delete: if hasAdminAccess();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // /visitor_invitations/{token} — pre-registered visitor passes.
+    //
+    // The {token} doc id IS the opaque capability token (a CSPRNG value the
+    // client generates), so the gate scanner resolves a scanned pass with ONE
+    // keyed get() and never needs list/query permission (CWE-639 enumeration
+    // closed by construction).
+    //
+    // RESIDENTS HAVE NO {role} CLAIM in this phase, so — unlike /announcements
+    // — the create gate cannot read request.auth.token.role. It instead reads
+    // the caller's OWN /users profile. That is sound precisely BECAUSE the
+    // /users rules make role/status/unitNumber un-self-settable: only
+    // claim-gated admin approval can produce role=resident + status=active +
+    // a verified unitNumber. So "verified resident" derived from the profile
+    // cannot be forged (CWE-269/CWE-639).
+    // ═════════════════════════════════════════════════════════════════
+    match /visitor_invitations/{token} {
+
+      function isVerifiedEmail() {
+        return request.auth != null
+            && request.auth.token.email_verified == true;
+      }
+      // Staff / admin / superadmin — the gate-scanner identities. Claim-gated.
+      function hasGateClaim() {
+        return hasGateAccess();
+      }
+      // The caller's OWN /users profile (see the block header for why trusting
+      // it for resident scoping is safe). A missing profile yields null fields,
+      // so every comparison below fails closed.
+      function profile() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data;
+      }
+      function isVerifiedResident() {
+        return isVerifiedEmail()
+            && profile().role == 'resident'
+            && profile().status == 'active'
+            && profile().unitNumber != null;
+      }
+      function existing() { return resource.data; }
+      function incoming() { return request.resource.data; }
+      // ── READ ─────────────────────────────────────────────────────────
+      // The issuing resident reads their own passes; gate staff/admin may read
+      // any pass to resolve a scanned token.
+      allow read: if (request.auth != null
+                      && resource.data.residentId == request.auth.uid)
+                  || hasGateClaim();
+
+      // ── CREATE ───────────────────────────────────────────────────────
+      // Only a VERIFIED resident, issuing for THEMSELVES (residentId pinned to
+      // the caller) and THEIR verified unit (unitNumber pinned to the profile),
+      // active, with a SERVER-stamped createdAt (== request.time, not a client
+      // clock), a future expiry, in-bounds fields, and NO extra keys
+      // (CWE-915 mass-assignment closed by the hasOnly allowlist). Client input
+      // is never the trust boundary (CWE-20 / CWE-602).
+      allow create: if isVerifiedResident()
+        && incoming().residentId == request.auth.uid
+        && incoming().unitNumber == profile().unitNumber
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().expiresAt is timestamp
+        && incoming().expiresAt > request.time
+        && incoming().visitDate is timestamp
+        && incoming().visitorName is string
+        && incoming().visitorName.size() > 0
+        && incoming().visitorName.size() <= 100
+        && incoming().visitorContact is string
+        && incoming().visitorContact.size() > 0
+        && incoming().visitorContact.size() <= 50
+        && incoming().guestCount is int
+        && incoming().guestCount >= 1
+        && incoming().guestCount <= 20
+        && incoming().eta is string
+        && incoming().eta.size() <= 50
+        && incoming().cancelledAt == null
+        && incoming().cancelledBy == null
+        && incoming().checkedInAt == null
+        && incoming().checkedInBy == null
+        && incoming().checkedOutAt == null
+        && incoming().checkedOutBy == null
+        && (incoming().vehiclePlate == null
+            || (incoming().vehiclePlate is string
+                && incoming().vehiclePlate.size() <= 20))
+        && incoming().keys().hasOnly(
+             ['residentId', 'unitNumber', 'visitorName', 'visitorContact',
+              'guestCount', 'vehiclePlate', 'visitDate', 'eta', 'status',
+              'createdAt', 'expiresAt', 'cancelledAt', 'cancelledBy',
+              'checkedInAt', 'checkedInBy', 'checkedOutAt', 'checkedOutBy']);
+
+      // ── UPDATE ───────────────────────────────────────────────────────
+      // Lifecycle-only updates: each branch allowlists status and its matching
+      // server timestamp/actor fields. Visitor identity, unit, schedule, and
+      // validity remain immutable post-issue (CWE-915).
+      //   • the issuing resident CANCELS an active pass (active → cancelled)
+      //   • gate staff/admin check a pass IN then OUT
+      //     (active → checkedIn → checkedOut)
+      // The pass state machine is the primary defence against replay (CWE-294):
+      // every other transition is denied.
+      allow update: if (
+        (
+          request.auth != null
+          && existing().residentId == request.auth.uid
+          && existing().status == 'active'
+          && incoming().status == 'cancelled'
+          && incoming().cancelledAt == request.time
+          && incoming().cancelledBy == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly(
+               ['status', 'cancelledAt', 'cancelledBy'])
+        )
+        ||
+        (
+          hasGateClaim()
+          && (
+            (existing().status == 'active'
+              && existing().visitDate <= request.time
+              && existing().expiresAt > request.time
+              && incoming().status == 'checkedIn'
+              && incoming().checkedInAt == request.time
+              && incoming().checkedInBy == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly(
+                   ['status', 'checkedInAt', 'checkedInBy']))
+            || (existing().status == 'checkedIn'
+              && incoming().status == 'checkedOut'
+              && incoming().checkedOutAt == request.time
+              && incoming().checkedOutBy == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly(
+                   ['status', 'checkedOutAt', 'checkedOutBy']))
+          )
+        )
+      );
+
+      // ── DELETE ───────────────────────────────────────────────────────
+      // Never — a pass is an audit record of who was admitted, and when.
+      allow delete: if false;
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // /maintenance_requests/{id} — unit-scoped repair / service tickets.
+    //
+    // Like /visitor_invitations, the CREATE gate authorises a resident from
+    // their OWN /users profile (residents carry no {role} claim this phase),
+    // which is sound because /users makes role/status/unitNumber un-self-settable.
+    // Status transitions are an ADMIN function: only an admin/superadmin CLAIM
+    // may write status + audit fields (CWE-269), never the filing resident.
+    // ═════════════════════════════════════════════════════════════════
+    match /maintenance_requests/{id} {
+
+      function isVerifiedEmail() {
+        return request.auth != null
+            && request.auth.token.email_verified == true;
+      }
+      function hasAdminClaim() {
+        return hasAdminAccess();
+      }
+      function profile() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data;
+      }
+      function isVerifiedResident() {
+        return isVerifiedEmail()
+            && profile().role == 'resident'
+            && profile().status == 'active'
+            && profile().unitNumber != null;
+      }
+      function existing() { return resource.data; }
+      function incoming() { return request.resource.data; }
+      function affectedKeys() {
+        return incoming().diff(existing()).affectedKeys();
+      }
+
+      // ── READ ─────────────────────────────────────────────────────────
+      // The filing resident reads their own tickets; admin/superadmin read all
+      // (the work queue). CWE-639: a resident cannot read another unit's tickets.
+      allow read: if (request.auth != null
+                      && resource.data.residentId == request.auth.uid)
+                  || hasAdminClaim();
+
+      // ── CREATE ───────────────────────────────────────────────────────
+      // Only a VERIFIED resident, for THEMSELVES and THEIR verified unit, with
+      // status pinned to 'pending', server-stamped timestamps, null audit
+      // fields, in-bounds title/description, a known category, and NO extra
+      // keys (CWE-915). Client input is never the trust boundary (CWE-20/602).
+      allow create: if isVerifiedResident()
+        && incoming().residentId == request.auth.uid
+        && incoming().unitNumber == profile().unitNumber
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().handledBy == null
+        && incoming().resolvedAt == null
+        && incoming().category in
+             ['plumbing', 'electrical', 'appliance', 'commonArea', 'other']
+        && incoming().title is string
+        && incoming().title.size() > 0
+        && incoming().title.size() <= 120
+        && incoming().description is string
+        && incoming().description.size() > 0
+        && incoming().description.size() <= 2000
+        && incoming().keys().hasOnly(
+             ['residentId', 'unitNumber', 'category', 'title', 'description',
+              'status', 'createdAt', 'updatedAt', 'handledBy', 'resolvedAt']);
+
+      // ── UPDATE ───────────────────────────────────────────────────────
+      // Admin / superadmin ONLY (claim-gated): advance status + stamp audit.
+      // The request body (residentId, unitNumber, category, title, description,
+      // createdAt) is immutable — affectedKeys().hasOnly([...]) rejects any
+      // attempt to alter it alongside the status change (CWE-915). updatedAt is
+      // pinned to the server clock.
+      allow update: if hasAdminClaim()
+        && affectedKeys().hasOnly(['status', 'handledBy', 'updatedAt', 'resolvedAt'])
+        && incoming().status in ['pending', 'inProgress', 'resolved']
+        && incoming().updatedAt == request.time
+        && incoming().handledBy == request.auth.uid
+        && (incoming().resolvedAt == null
+            || incoming().resolvedAt == request.time);
+
+      // ── DELETE ───────────────────────────────────────────────────────
+      // Never — tickets are an audit record (who filed, who resolved, when).
+      allow delete: if false;
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // /ev_stations/{id} — charging bays. `status` is AUTHORITATIVE and
+    // server-mutated. Three write models share one update rule:
+    //   • admin/superadmin CLAIM seeds, renames, and enables/disables a bay;
+    //   • a verified resident CLAIMS an available bay (available → inUse);
+    //   • the OWNER of the in-progress session RELEASES it (inUse → available),
+    //     proven by a get() on the bay's currentSessionId.userId.
+    // Residents never set status='inUse' for anyone else, and never free a bay
+    // they don't occupy (CWE-285/CWE-639). status='available' must be the only
+    // chargeable state, so a malformed station fails safe to offline (model).
+    // ═════════════════════════════════════════════════════════════════
+    match /ev_stations/{id} {
+
+      function isVerifiedEmail() {
+        return request.auth != null
+            && request.auth.token.email_verified == true;
+      }
+      function hasAdminClaim() {
+        return hasAdminAccess();
+      }
+      function profile() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data;
+      }
+      function isVerifiedResident() {
+        return isVerifiedEmail()
+            && profile().role == 'resident'
+            && profile().status == 'active'
+            && profile().unitNumber != null;
+      }
+      function existing() { return resource.data; }
+      function incoming() { return request.resource.data; }
+      function affectedKeys() {
+        return incoming().diff(existing()).affectedKeys();
+      }
+      // Owner uid of a session, via a keyed get(); null if it doesn't exist.
+      function sessionOwner(sid) {
+        return get(/databases/$(database)/documents/ev_sessions/$(sid))
+            .data.userId;
+      }
+      function sessionAfter(sid) {
+        return getAfter(/databases/$(database)/documents/ev_sessions/$(sid))
+            .data;
+      }
+
+      // ── READ — any verified user can see the bays and their state. ─────
+      allow read: if isVerifiedEmail();
+
+      // ── CREATE — admin/superadmin only; starts available + idle. ───────
+      allow create: if hasAdminClaim()
+        && incoming().status == 'available'
+        && incoming().currentSessionId == null
+        && incoming().name is string
+        && incoming().name.size() > 0
+        && incoming().name.size() <= 100
+        && incoming().location is string
+        && incoming().location.size() <= 200
+        && incoming().keys().hasOnly(
+             ['name', 'location', 'status', 'currentSessionId']);
+
+      // ── UPDATE — admin-manage OR resident-claim OR owner-release. ──────
+      allow update: if
+        // (a) admin manage: rename / relocate, enable (available) or disable
+        //     (offline), always idle. Admin may NOT set inUse (no forging an
+        //     occupied bay).
+        (
+          hasAdminClaim()
+          && existing().status in ['available', 'offline']
+          && incoming().status in ['available', 'offline']
+          && incoming().currentSessionId == null
+          && incoming().name is string
+          && incoming().name.size() > 0
+          && incoming().name.size() <= 100
+          && incoming().location is string
+          && incoming().location.size() <= 200
+          && incoming().keys().hasOnly(
+               ['name', 'location', 'status', 'currentSessionId'])
+        )
+        ||
+        // (b) resident CLAIM: available → inUse, only status + currentSessionId
+        //     change. Session ownership is enforced on RELEASE and at session
+        //     create — the claimed id need not be re-proven here.
+        (
+          isVerifiedResident()
+          && affectedKeys().hasOnly(['status', 'currentSessionId'])
+          && existing().status == 'available'
+          && incoming().status == 'inUse'
+          && incoming().currentSessionId is string
+          && incoming().currentSessionId.size() > 0
+          && sessionAfter(incoming().currentSessionId).userId
+              == request.auth.uid
+          && sessionAfter(incoming().currentSessionId).stationId == id
+          && sessionAfter(incoming().currentSessionId).status == 'active'
+        )
+        ||
+        // (c) RELEASE: inUse → available, only status + currentSessionId change.
+        //     Allowed for the session OWNER (get() proves userId == caller) or
+        //     an admin (e.g. clearing a stuck bay).
+        (
+          affectedKeys().hasOnly(['status', 'currentSessionId'])
+          && existing().status == 'inUse'
+          && existing().currentSessionId is string
+          && incoming().status == 'available'
+          && incoming().currentSessionId == null
+          && sessionAfter(existing().currentSessionId).status == 'completed'
+          && (
+               hasAdminClaim()
+               || (request.auth != null
+                   && sessionOwner(existing().currentSessionId)
+                      == request.auth.uid)
+             )
+        );
+
+      // ── DELETE — admin/superadmin only. ────────────────────────────────
+      allow delete: if hasAdminClaim();
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // /ev_sessions/{id} — per-charge audit log. Owner-scoped.
+    // ═════════════════════════════════════════════════════════════════
+    match /ev_sessions/{id} {
+
+      function isVerifiedEmail() {
+        return request.auth != null
+            && request.auth.token.email_verified == true;
+      }
+      function hasAdminClaim() {
+        return hasAdminAccess();
+      }
+      function profile() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid))
+            .data;
+      }
+      function isVerifiedResident() {
+        return isVerifiedEmail()
+            && profile().role == 'resident'
+            && profile().status == 'active'
+            && profile().unitNumber != null;
+      }
+      function existing() { return resource.data; }
+      function incoming() { return request.resource.data; }
+      function affectedKeys() {
+        return incoming().diff(existing()).affectedKeys();
+      }
+      function stationAfter(stationId) {
+        return getAfter(/databases/$(database)/documents/ev_stations/$(stationId))
+            .data;
+      }
+
+      // ── READ — own sessions, or admin (the full charging log). ─────────
+      allow read: if (request.auth != null
+                      && resource.data.userId == request.auth.uid)
+                  || hasAdminClaim();
+
+      // ── CREATE — a verified resident opens an active session for THEMSELVES
+      //     and THEIR unit, server-stamped, no end time yet, no extra keys. ─
+      allow create: if isVerifiedResident()
+        && incoming().userId == request.auth.uid
+        && incoming().unitNumber == profile().unitNumber
+        && incoming().status == 'active'
+        && incoming().startedAt == request.time
+        && incoming().endedAt == null
+        && incoming().stationId is string
+        && incoming().stationId.size() > 0
+        && stationAfter(incoming().stationId).status == 'inUse'
+        && stationAfter(incoming().stationId).currentSessionId == id
+        && incoming().keys().hasOnly(
+             ['stationId', 'userId', 'unitNumber', 'startedAt', 'endedAt',
+              'status']);
+
+      // ── UPDATE — complete an active session (status + endedAt only). The
+      //     owner or an admin may close it; nothing else may change. ───────
+      allow update: if affectedKeys().hasOnly(['status', 'endedAt'])
+        && existing().status == 'active'
+        && incoming().status == 'completed'
+        && incoming().endedAt == request.time
+        && (
+             (request.auth != null && existing().userId == request.auth.uid)
+             || hasAdminClaim()
+           )
+        && stationAfter(existing().stationId).status == 'available'
+        && stationAfter(existing().stationId).currentSessionId == null;
+
+      // ── DELETE — never (audit record). ─────────────────────────────────
+      allow delete: if false;
+    }
+
+    // /iot_devices/{uid} - private registry that binds one Firebase Auth
+    // device account to one physical charging station. Device clients may read
+    // only their own registration; registry writes stay console/admin-only.
+    match /iot_devices/{deviceUid} {
+      allow read: if request.auth != null
+          && request.auth.uid == deviceUid;
+      allow create, update, delete: if false;
+    }
+
+    // /ev_device_status/{stationId} - physical ESP32 state. This is separate
+    // from /ev_stations so device telemetry cannot forge resident sessions or
+    // change the authoritative station availability state.
+    match /ev_device_status/{stationId} {
+      function registrationPath() {
+        return /databases/$(database)/documents/iot_devices/$(request.auth.uid);
+      }
+      function isRegisteredDevice() {
+        return request.auth != null
+            && exists(registrationPath())
+            && get(registrationPath()).data.enabled == true
+            && get(registrationPath()).data.stationId == stationId;
+      }
+      function incoming() { return request.resource.data; }
+      function validStatusPayload() {
+        return incoming().keys().hasOnly(['state', 'adc', 'online'])
+            && incoming().state in ['charging', 'idle']
+            && incoming().adc is int
+            && incoming().adc >= 0
+            && incoming().adc <= 4095
+            && incoming().online is bool;
+      }
+
+      allow read: if isVerifiedEmail();
+      allow create, update: if isRegisteredDevice()
+          && validStatusPayload();
+      allow delete: if false;
     }
 
     // Default-deny for every other collection until explicitly granted.
