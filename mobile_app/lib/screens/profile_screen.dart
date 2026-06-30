@@ -58,75 +58,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _edit() async {
-    final nameController = TextEditingController(text: _user.name);
-    final phoneController = TextEditingController(
-      text: _user.phoneNumber ?? '',
-    );
-    final formKey = GlobalKey<FormState>();
-
-    final saved = await showDialog<bool>(
+    final result = await showDialog<_ProfileFormResult>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit profile'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameController,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(labelText: 'Full name'),
-                validator: (v) => (v == null || v.trim().length < 2)
-                    ? 'Enter at least 2 characters'
-                    : null,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              TextFormField(
-                controller: phoneController,
-                keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(
-                  labelText: 'Phone (optional)',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.of(ctx).pop(true);
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => _ProfileEditDialog(
+        initialName: _user.name,
+        initialPhone: _user.phoneNumber ?? '',
       ),
     );
+    if (result == null) return;
 
-    final newName = nameController.text.trim();
-    final newPhoneRaw = phoneController.text.trim();
-    nameController.dispose();
-    phoneController.dispose();
-
-    if (saved != true) return;
-
-    final newPhone = newPhoneRaw.isEmpty ? null : newPhoneRaw;
+    final newPhone = result.phone.isEmpty ? null : result.phone;
     try {
       await _userRepository.updateProfile(
         uid: _user.uid,
-        name: newName,
+        name: result.name,
         phoneNumber: newPhone,
         clearPhoneNumber: newPhone == null,
       );
       if (mounted) {
         setState(
-          () => _user = _user.copyWith(name: newName, phoneNumber: newPhone),
+          () => _user = _user.copyWith(
+            name: result.name,
+            phoneNumber: newPhone,
+            clearPhoneNumber: newPhone == null,
+          ),
         );
         ScaffoldMessenger.of(
           context,
@@ -240,6 +195,111 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ProfileFormResult {
+  final String name;
+  final String phone;
+
+  const _ProfileFormResult({required this.name, required this.phone});
+}
+
+/// Owns the form controllers for the full lifetime of the dialog route.
+/// Disposing controllers in the caller immediately after `showDialog` returns
+/// can race the route's closing animation and produce a red error screen.
+class _ProfileEditDialog extends StatefulWidget {
+  final String initialName;
+  final String initialPhone;
+
+  const _ProfileEditDialog({
+    required this.initialName,
+    required this.initialPhone,
+  });
+
+  @override
+  State<_ProfileEditDialog> createState() => _ProfileEditDialogState();
+}
+
+class _ProfileEditDialogState extends State<_ProfileEditDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _phoneController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _phoneController = TextEditingController(text: widget.initialPhone);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.of(context).pop(
+      _ProfileFormResult(
+        name: _nameController.text.trim(),
+        phone: _phoneController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit profile'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'Full name'),
+                validator: (value) => (value == null || value.trim().length < 2)
+                    ? 'Enter at least 2 characters'
+                    : null,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextFormField(
+                controller: _phoneController,
+                keyboardType: TextInputType.phone,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _save(),
+                decoration: const InputDecoration(
+                  labelText: 'Phone (optional)',
+                  hintText: 'e.g. 012-345 6789',
+                ),
+                validator: (value) {
+                  final phone = (value ?? '').trim();
+                  if (phone.isEmpty) return null;
+                  if (!RegExp(r'^\+?[0-9][0-9 ()-]{6,19}$').hasMatch(phone)) {
+                    return 'Enter a valid phone number';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: const Text('Save')),
+      ],
     );
   }
 }

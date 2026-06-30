@@ -49,6 +49,7 @@ firmware_esp32/.pio/
 firmware_esp32/.vscode/
 firmware_esp32/secrets.h
 firmware_esp32/include/secrets.h
+firmware_esp32/**/secrets.h
 
 # IDE
 .idea/

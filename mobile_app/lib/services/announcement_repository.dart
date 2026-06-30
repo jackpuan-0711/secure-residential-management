@@ -14,7 +14,7 @@ class AnnouncementRepository {
   final FirebaseFirestore _firestore;
 
   AnnouncementRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   // ═══════════════════════════════════════════════════════════════
   // CREATE
@@ -54,6 +54,27 @@ class AnnouncementRepository {
       'pinned': pinned,
       // Server-authoritative timestamp; the model never writes a client one.
       'postedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  /// Edits mutable announcement content while preserving original authorship
+  /// and post time. Firestore rules require the edit audit fields to match the
+  /// signed-in administrator and the server request time.
+  Future<void> updateAnnouncement({
+    required String announcementId,
+    required String title,
+    required String body,
+    required String editedBy,
+    required AnnouncementPriority priority,
+    required bool pinned,
+  }) async {
+    await _firestore.collection('announcements').doc(announcementId).update({
+      'title': title,
+      'body': body,
+      'priority': priority.toFirestoreValue(),
+      'pinned': pinned,
+      'editedBy': editedBy,
+      'editedAt': FieldValue.serverTimestamp(),
     });
   }
 

@@ -56,6 +56,30 @@ void main() {
       expect((await stationData(id))['status'], 'available');
     });
 
+    test('admin update normalizes a legacy station document', () async {
+      const id = 'legacy';
+      await firestore.collection('ev_stations').doc(id).set({
+        'name': 'Old station',
+        'location': 'Old location',
+        'status': 'outOfService',
+        'legacyOnline': false,
+      });
+
+      await repository.updateStationDetails(
+        stationId: id,
+        name: 'Station Alpha',
+        location: 'Basement 1',
+      );
+      await repository.setStationOffline(stationId: id, offline: false);
+
+      expect(await stationData(id), {
+        'name': 'Station Alpha',
+        'location': 'Basement 1',
+        'status': 'available',
+        'currentSessionId': null,
+      });
+    });
+
     test('watchStations emits seeded bays', () async {
       await seedStation(name: 'A');
       await seedStation(name: 'B');
@@ -65,6 +89,58 @@ void main() {
       await sub.cancel();
       expect(emissions.last.map((s) => s.name).toSet(), {'A', 'B'});
     });
+    test('configured station ignores unrelated station documents', () async {
+      const configuredId = 'configured-charger';
+      final fixedRepository = EvChargingRepository(
+        firestore: firestore,
+        stationId: configuredId,
+      );
+      await firestore.collection('ev_stations').doc(configuredId).set({
+        'name': 'Configured charger',
+        'location': 'Parking A1',
+        'status': 'available',
+        'currentSessionId': null,
+      });
+      await firestore.collection('ev_stations').doc('old-random-id').set({
+        'name': 'Old station',
+        'location': 'Parking B1',
+        'status': 'available',
+        'currentSessionId': null,
+      });
+
+      final stations = await fixedRepository.watchConfiguredStation().first;
+
+      expect(stations, hasLength(1));
+      expect(stations.single.id, configuredId);
+    });
+    test(
+      'missing configured station is shown and restored at the fixed id',
+      () async {
+        const configuredId = 'configured-charger';
+        final fixedRepository = EvChargingRepository(
+          firestore: firestore,
+          stationId: configuredId,
+        );
+
+        final fallback = await fixedRepository.watchConfiguredStation().first;
+        expect(fallback, hasLength(1));
+        expect(fallback.single.id, configuredId);
+        expect(fallback.single.status, EvStationStatus.offline);
+
+        await fixedRepository.ensureConfiguredStation();
+
+        final snapshot = await firestore
+            .collection('ev_stations')
+            .doc(configuredId)
+            .get();
+        expect(snapshot.data(), {
+          'name': 'Charger 1',
+          'location': 'Parking A1',
+          'status': 'available',
+          'currentSessionId': null,
+        });
+      },
+    );
   });
 
   group('ESP32 device status', () {
@@ -77,6 +153,7 @@ void main() {
         'state': 'charging',
         'adc': 4095,
         'online': true,
+        'lastSeenAt': Timestamp.now(),
       });
       final charging = await repository
           .watchDeviceStatus('st1')
@@ -89,11 +166,59 @@ void main() {
         'state': 'idle',
         'adc': 0,
         'online': true,
+        'lastSeenAt': Timestamp.now(),
       });
       final idle = await repository
           .watchDeviceStatus('st1')
           .firstWhere((status) => status?.state == EvDeviceState.idle);
       expect(idle!.state, EvDeviceState.idle);
+      expect(idle.isConnectedAt(DateTime.now()), isTrue);
+    });
+
+    test('stale telemetry is treated as disconnected', () async {
+      await firestore.collection('ev_device_status').doc('st1').set({
+        'state': 'charging',
+        'adc': 4095,
+        'online': true,
+        'lastSeenAt': Timestamp.fromDate(
+          DateTime.now().subtract(const Duration(minutes: 2)),
+        ),
+      });
+      final status = await repository
+          .watchDeviceStatus('st1')
+          .firstWhere((value) => value != null);
+      expect(status!.isConnectedAt(DateTime.now()), isFalse);
+    });
+
+    test('30-second firmware heartbeat stays connected between reports', () {
+      final lastSeen = DateTime.utc(2026, 7, 1, 2, 14);
+      final status = EvDeviceStatus(
+        stationId: 'st1',
+        state: EvDeviceState.charging,
+        adc: 2243,
+        online: true,
+        lastSeenAt: lastSeen,
+      );
+
+      expect(
+        status.isConnectedAt(lastSeen.add(const Duration(seconds: 45))),
+        isTrue,
+      );
+      expect(
+        status.isConnectedAt(lastSeen.add(const Duration(seconds: 76))),
+        isFalse,
+      );
+    });
+
+    test('telemetry without a heartbeat is treated as disconnected', () async {
+      await firestore.collection('ev_device_status').doc('st1').set({
+        'state': 'available',
+        'adc': 0,
+        'online': true,
+      });
+      final status = await repository.watchDeviceStatus('st1').first;
+      expect(status!.state, EvDeviceState.idle);
+      expect(status.isConnectedAt(DateTime.now()), isFalse);
     });
 
     test('unknown device state fails closed in the model', () {
@@ -265,7 +390,7 @@ void main() {
       );
     });
 
-    test('missing station strings fail closed instead of throwing', () async {
+    test('missing display strings keep a valid station status', () async {
       final ref = firestore.collection('ev_stations').doc('broken');
       await ref.set({
         'name': null,
@@ -277,7 +402,7 @@ void main() {
 
       expect(station.name, 'Charging station');
       expect(station.location, 'Location unavailable');
-      expect(station.status, EvStationStatus.offline);
+      expect(station.status, EvStationStatus.available);
     });
   });
 }

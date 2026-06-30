@@ -95,7 +95,7 @@ class VisitorRepository {
     required String visitorName,
     required String visitorContact,
     int guestCount = 1,
-    String? vehiclePlate,
+    required String vehiclePlate,
     required DateTime visitDate,
     required String eta,
   }) async {
@@ -120,7 +120,10 @@ class VisitorRepository {
       59,
     );
 
-    final plate = vehiclePlate?.trim();
+    final plate = vehiclePlate.trim();
+    if (plate.isEmpty) {
+      throw const VisitorRepositoryException('Vehicle plate is required.');
+    }
     final invitation = VisitorInvitation(
       invitationId: token,
       residentId: residentId,
@@ -128,7 +131,7 @@ class VisitorRepository {
       visitorName: visitorName.trim(),
       visitorContact: visitorContact.trim(),
       guestCount: guestCount,
-      vehiclePlate: (plate != null && plate.isNotEmpty) ? plate : null,
+      vehiclePlate: plate,
       visitDate: visitDate,
       eta: eta.trim(),
       status: VisitorPassStatus.active,

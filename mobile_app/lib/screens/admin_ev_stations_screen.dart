@@ -4,6 +4,7 @@ import '../models/ev_station.dart';
 import '../services/ev_charging_repository.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ev_device_status_line.dart';
 
 class AdminEvStationsScreen extends StatefulWidget {
   final EvChargingRepository? repository;
@@ -18,15 +19,34 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
   late final EvChargingRepository _repo;
   late final Stream<List<EvStation>> _stations;
   final Set<String> _busyStationIds = <String>{};
+  final Map<String, Stream<EvDeviceStatus?>> _deviceStatusStreams = {};
 
   @override
   void initState() {
     super.initState();
     _repo = widget.repository ?? EvChargingRepository();
-    _stations = _repo.watchStations();
+    _stations = _repo.watchConfiguredStation();
+    _ensureConfiguredStation();
+  }
+
+  Future<void> _ensureConfiguredStation() async {
+    try {
+      await _repo.ensureConfiguredStation();
+    } catch (error) {
+      if (mounted) {
+        _toast('Could not initialize the EV station: $error', isError: true);
+      }
+    }
   }
 
   bool _isBusy(EvStation station) => _busyStationIds.contains(station.id);
+
+  Stream<EvDeviceStatus?> _deviceStatusFor(String stationId) {
+    return _deviceStatusStreams.putIfAbsent(
+      stationId,
+      () => _repo.watchDeviceStatus(stationId),
+    );
+  }
 
   Future<void> _runStationAction(
     EvStation station,
@@ -50,21 +70,6 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(text), backgroundColor: isError ? cs.error : null),
     );
-  }
-
-  Future<void> _addStation() async {
-    final result = await _showStationEditor(
-      title: 'Add charging station',
-      actionLabel: 'Add station',
-    );
-    if (result == null) return;
-
-    try {
-      await _repo.addStation(name: result.name, location: result.location);
-      if (mounted) _toast('Station added.');
-    } catch (e) {
-      if (mounted) _toast('Could not add station: $e', isError: true);
-    }
   }
 
   Future<void> _editStation(EvStation station) async {
@@ -93,67 +98,15 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
     String initialName = '',
     String initialLocation = '',
   }) async {
-    final nameCtrl = TextEditingController(text: initialName);
-    final locationCtrl = TextEditingController(text: initialLocation);
-    final formKey = GlobalKey<FormState>();
-
-    final result = await showDialog<_StationFormResult>(
+    return showDialog<_StationFormResult>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameCtrl,
-                maxLength: 100,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'e.g. Station 1',
-                ),
-                validator: (value) =>
-                    (value ?? '').trim().isEmpty ? 'Name is required.' : null,
-              ),
-              TextFormField(
-                controller: locationCtrl,
-                maxLength: 200,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Location',
-                  hintText: 'e.g. Basement 2, Bay A',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.of(ctx).pop(
-                  _StationFormResult(
-                    nameCtrl.text.trim(),
-                    locationCtrl.text.trim(),
-                  ),
-                );
-              }
-            },
-            child: Text(actionLabel),
-          ),
-        ],
+      builder: (_) => _StationEditorDialog(
+        title: title,
+        actionLabel: actionLabel,
+        initialName: initialName,
+        initialLocation: initialLocation,
       ),
     );
-
-    nameCtrl.dispose();
-    locationCtrl.dispose();
-    return result;
   }
 
   Future<void> _setOffline(EvStation station, bool offline) async {
@@ -195,36 +148,6 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
     );
   }
 
-  Future<void> _delete(EvStation station) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Remove ${station.name}?'),
-        content: const Text('This permanently removes the charging station.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-            ),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    await _runStationAction(
-      station,
-      () => _repo.removeStation(station.id),
-      '${station.name} removed.',
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
@@ -254,7 +177,7 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
 
             final stations = snapshot.data ?? const <EvStation>[];
             if (stations.isEmpty) {
-              return _EmptyStations(onAdd: _addStation);
+              return const _EmptyStations();
             }
 
             return ListView(
@@ -267,22 +190,17 @@ class _AdminEvStationsScreenState extends State<AdminEvStationsScreen> {
                     padding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: _AdminStationCard(
                       station: station,
+                      deviceStatus: _deviceStatusFor(station.id),
                       busy: _isBusy(station),
                       onEdit: () => _editStation(station),
                       onSetOffline: (off) => _setOffline(station, off),
                       onEndSession: () => _endActiveSession(station),
-                      onDelete: () => _delete(station),
                     ),
                   ),
               ],
             );
           },
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addStation,
-        icon: const Icon(AppIcons.add),
-        label: const Text('Add station'),
       ),
     );
   }
@@ -293,6 +211,100 @@ class _StationFormResult {
   final String location;
 
   const _StationFormResult(this.name, this.location);
+}
+
+class _StationEditorDialog extends StatefulWidget {
+  final String title;
+  final String actionLabel;
+  final String initialName;
+  final String initialLocation;
+
+  const _StationEditorDialog({
+    required this.title,
+    required this.actionLabel,
+    required this.initialName,
+    required this.initialLocation,
+  });
+
+  @override
+  State<_StationEditorDialog> createState() => _StationEditorDialogState();
+}
+
+class _StationEditorDialogState extends State<_StationEditorDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _nameController;
+  late final TextEditingController _locationController;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _locationController = TextEditingController(text: widget.initialLocation);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _locationController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    Navigator.of(context).pop(
+      _StationFormResult(
+        _nameController.text.trim(),
+        _locationController.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _nameController,
+                maxLength: 100,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  hintText: 'e.g. Station 1',
+                ),
+                validator: (value) =>
+                    (value ?? '').trim().isEmpty ? 'Name is required.' : null,
+              ),
+              TextFormField(
+                controller: _locationController,
+                maxLength: 200,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _save(),
+                decoration: const InputDecoration(
+                  labelText: 'Location',
+                  hintText: 'e.g. Basement 2, Bay A',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _save, child: Text(widget.actionLabel)),
+      ],
+    );
+  }
 }
 
 class _StationSummary extends StatelessWidget {
@@ -368,19 +380,19 @@ class _SummaryChip extends StatelessWidget {
 
 class _AdminStationCard extends StatelessWidget {
   final EvStation station;
+  final Stream<EvDeviceStatus?> deviceStatus;
   final bool busy;
   final VoidCallback onEdit;
   final ValueChanged<bool> onSetOffline;
   final VoidCallback onEndSession;
-  final VoidCallback onDelete;
 
   const _AdminStationCard({
     required this.station,
+    required this.deviceStatus,
     required this.busy,
     required this.onEdit,
     required this.onSetOffline,
     required this.onEndSession,
-    required this.onDelete,
   });
 
   @override
@@ -415,6 +427,8 @@ class _AdminStationCard extends StatelessWidget {
                           color: cs.onSurfaceVariant,
                         ),
                       ),
+                      const SizedBox(height: AppSpacing.xs),
+                      EvDeviceStatusLine(stream: deviceStatus),
                     ],
                   ),
                 ),
@@ -443,14 +457,9 @@ class _AdminStationCard extends StatelessWidget {
                     label: Text(offline ? 'Set online' : 'Set offline'),
                   ),
                 OutlinedButton.icon(
-                  onPressed: busy || inUse ? null : onEdit,
+                  onPressed: busy ? null : onEdit,
                   icon: const Icon(AppIcons.edit),
                   label: const Text('Edit'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy || inUse ? null : onDelete,
-                  icon: Icon(Icons.delete_outline_rounded, color: cs.error),
-                  label: Text('Remove', style: TextStyle(color: cs.error)),
                 ),
               ],
             ),
@@ -493,9 +502,7 @@ class _StationStatusChip extends StatelessWidget {
 }
 
 class _EmptyStations extends StatelessWidget {
-  final VoidCallback onAdd;
-
-  const _EmptyStations({required this.onAdd});
+  const _EmptyStations();
 
   @override
   Widget build(BuildContext context) {
@@ -514,18 +521,12 @@ class _EmptyStations extends StatelessWidget {
               color: cs.onSurfaceVariant,
             ),
             const SizedBox(height: AppSpacing.md),
-            Text('No stations yet', style: tt.titleMedium),
+            Text('EV station unavailable', style: tt.titleMedium),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Add charging stations before residents can start EV sessions.',
+              'The configured EV station could not be found.',
               textAlign: TextAlign.center,
               style: tt.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            FilledButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(AppIcons.add),
-              label: const Text('Add first station'),
             ),
           ],
         ),

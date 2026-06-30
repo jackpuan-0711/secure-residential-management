@@ -9,7 +9,9 @@ const {
   assertSucceeds,
 } = require('@firebase/rules-unit-testing');
 const { firestoreEmulatorOptions } = require('./test_environment');
-const { doc, setDoc, getDoc, deleteDoc } = require('firebase/firestore');
+const {
+  doc, setDoc, getDoc, deleteDoc, serverTimestamp,
+} = require('firebase/firestore');
 
 const PROJECT_ID = 'residential-management-a3fbf';
 const RULES_PATH = join(__dirname, '..', 'firestore.rules');
@@ -52,37 +54,53 @@ beforeEach(async () => {
 test('registered ESP32 writes valid state to its station', async () => {
   await assertSucceeds(setDoc(
     doc(deviceDb(), 'ev_device_status', STATION_ID),
-    { state: 'charging', adc: 4095, online: true },
+    {
+      state: 'charging', adc: 4095, online: true, lastSeenAt: serverTimestamp(),
+    },
+  ));
+});
+
+test('prototype available state is accepted as an idle-compatible state', async () => {
+  await assertSucceeds(setDoc(
+    doc(deviceDb(), 'ev_device_status', STATION_ID),
+    {
+      state: 'available', adc: 0, online: true, lastSeenAt: serverTimestamp(),
+    },
   ));
 });
 
 test('registered ESP32 cannot write another station', async () => {
   await assertFails(setDoc(
     doc(deviceDb(), 'ev_device_status', 'another-station'),
-    { state: 'idle', adc: 0, online: true },
+    { state: 'idle', adc: 0, online: true, lastSeenAt: serverTimestamp() },
   ));
 });
 
 test('unregistered device cannot write status', async () => {
   await assertFails(setDoc(
     doc(otherDeviceDb(), 'ev_device_status', STATION_ID),
-    { state: 'idle', adc: 0, online: true },
+    { state: 'idle', adc: 0, online: true, lastSeenAt: serverTimestamp() },
   ));
 });
 
 test('invalid state, ADC, or extra field is denied', async () => {
   const ref = doc(deviceDb(), 'ev_device_status', STATION_ID);
-  await assertFails(setDoc(ref, { state: 'fault', adc: 0, online: true }));
-  await assertFails(setDoc(ref, { state: 'idle', adc: 4096, online: true }));
   await assertFails(setDoc(ref, {
-    state: 'idle', adc: 0, online: true, userId: 'forged',
+    state: 'fault', adc: 0, online: true, lastSeenAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(ref, {
+    state: 'idle', adc: 4096, online: true, lastSeenAt: serverTimestamp(),
+  }));
+  await assertFails(setDoc(ref, {
+    state: 'idle', adc: 0, online: true,
+    lastSeenAt: serverTimestamp(), userId: 'forged',
   }));
 });
 
 test('verified app user reads device state; anonymous device cannot', async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'ev_device_status', STATION_ID), {
-      state: 'idle', adc: 0, online: true,
+      state: 'idle', adc: 0, online: true, lastSeenAt: serverTimestamp(),
     });
   });
 
@@ -97,7 +115,7 @@ test('verified app user reads device state; anonymous device cannot', async () =
 test('device cannot delete status or modify its registration', async () => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'ev_device_status', STATION_ID), {
-      state: 'idle', adc: 0, online: true,
+      state: 'idle', adc: 0, online: true, lastSeenAt: serverTimestamp(),
     });
   });
 

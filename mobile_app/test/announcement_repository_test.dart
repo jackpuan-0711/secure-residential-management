@@ -26,30 +26,35 @@ void main() {
   // ═══════════════════════════════════════════════════════════════
 
   group('postAnnouncement', () {
-    test('writes a doc with all expected fields and a server postedAt',
-        () async {
-      await repository.postAnnouncement(
-        title: 'Pool Maintenance',
-        body: 'The pool will be closed Monday.',
-        postedBy: 'admin-001',
-        postedByRole: UserRole.admin,
-        priority: AnnouncementPriority.warning,
-        pinned: true,
-      );
+    test(
+      'writes a doc with all expected fields and a server postedAt',
+      () async {
+        await repository.postAnnouncement(
+          title: 'Pool Maintenance',
+          body: 'The pool will be closed Monday.',
+          postedBy: 'admin-001',
+          postedByRole: UserRole.admin,
+          priority: AnnouncementPriority.warning,
+          pinned: true,
+        );
 
-      final snap = await fakeFirestore.collection('announcements').get();
-      expect(snap.docs.length, 1);
+        final snap = await fakeFirestore.collection('announcements').get();
+        expect(snap.docs.length, 1);
 
-      final data = snap.docs.first.data();
-      expect(data['title'], 'Pool Maintenance');
-      expect(data['body'], 'The pool will be closed Monday.');
-      expect(data['postedBy'], 'admin-001');
-      expect(data['postedByRole'], 'admin');
-      expect(data['priority'], 'warning');
-      expect(data['pinned'], isTrue);
-      expect(data['postedAt'], isA<Timestamp>(),
-          reason: 'postedAt must be a server timestamp, not a client clock');
-    });
+        final data = snap.docs.first.data();
+        expect(data['title'], 'Pool Maintenance');
+        expect(data['body'], 'The pool will be closed Monday.');
+        expect(data['postedBy'], 'admin-001');
+        expect(data['postedByRole'], 'admin');
+        expect(data['priority'], 'warning');
+        expect(data['pinned'], isTrue);
+        expect(
+          data['postedAt'],
+          isA<Timestamp>(),
+          reason: 'postedAt must be a server timestamp, not a client clock',
+        );
+      },
+    );
 
     test('defaults priority to info and pinned to false', () async {
       await repository.postAnnouncement(
@@ -76,6 +81,42 @@ void main() {
       final snap = await fakeFirestore.collection('announcements').get();
       expect(snap.docs.first.data()['postedByRole'], 'superadmin');
     });
+  });
+
+  group('updateAnnouncement', () {
+    test(
+      'updates content and records the editor without changing authorship',
+      () async {
+        await repository.postAnnouncement(
+          title: 'Original',
+          body: 'Original body',
+          postedBy: 'admin-001',
+          postedByRole: UserRole.admin,
+        );
+        final original =
+            (await fakeFirestore.collection('announcements').get()).docs.single;
+        final originalPostedAt = original.data()['postedAt'];
+
+        await repository.updateAnnouncement(
+          announcementId: original.id,
+          title: 'Corrected',
+          body: 'Corrected body',
+          editedBy: 'super-001',
+          priority: AnnouncementPriority.warning,
+          pinned: true,
+        );
+
+        final data = (await original.reference.get()).data()!;
+        expect(data['title'], 'Corrected');
+        expect(data['body'], 'Corrected body');
+        expect(data['priority'], 'warning');
+        expect(data['pinned'], isTrue);
+        expect(data['editedBy'], 'super-001');
+        expect(data['editedAt'], isA<Timestamp>());
+        expect(data['postedBy'], 'admin-001');
+        expect(data['postedAt'], originalPostedAt);
+      },
+    );
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -107,8 +148,7 @@ void main() {
       expect(announcement.postedAt, isA<DateTime>());
     });
 
-    test(
-        'fromFirestore falls back to info on a malformed priority '
+    test('fromFirestore falls back to info on a malformed priority '
         '(does NOT throw on bad data)', () async {
       // A corrupt / future-version doc written directly, bypassing the repo.
       await fakeFirestore.collection('announcements').doc('bad-1').set({
@@ -121,16 +161,20 @@ void main() {
         'postedAt': FieldValue.serverTimestamp(),
       });
 
-      final doc =
-          await fakeFirestore.collection('announcements').doc('bad-1').get();
+      final doc = await fakeFirestore
+          .collection('announcements')
+          .doc('bad-1')
+          .get();
       final announcement = Announcement.fromFirestore(doc, null);
 
-      expect(announcement.priority, AnnouncementPriority.info,
-          reason: 'a malformed priority must degrade, not crash the feed');
+      expect(
+        announcement.priority,
+        AnnouncementPriority.info,
+        reason: 'a malformed priority must degrade, not crash the feed',
+      );
     });
 
-    test(
-        'fromFirestore tolerates a null/pending postedAt but stays strict on '
+    test('fromFirestore tolerates a null/pending postedAt but stays strict on '
         'corrupt identity fields', () async {
       // A null postedAt mimics Firestore's latency-compensation / pending-write
       // window, where the author's own local snapshot sees serverTimestamp()
@@ -151,11 +195,16 @@ void main() {
           .doc('pending-1')
           .get();
       final announcement = Announcement.fromFirestore(pendingDoc, null);
-      expect(announcement.postedAt, isA<DateTime>(),
-          reason:
-              'a pending/null postedAt must resolve to a non-null DateTime');
-      expect(announcement.title, 'Pending',
-          reason: 'the rest of a valid doc still hydrates normally');
+      expect(
+        announcement.postedAt,
+        isA<DateTime>(),
+        reason: 'a pending/null postedAt must resolve to a non-null DateTime',
+      );
+      expect(
+        announcement.title,
+        'Pending',
+        reason: 'the rest of a valid doc still hydrates normally',
+      );
 
       // Strictness is TARGETED, not blanket: a genuinely corrupt doc (missing
       // title) must still throw — identity fields are never leniently defaulted.
@@ -193,12 +242,18 @@ void main() {
     });
 
     test('deserializes every known value', () {
-      expect(AnnouncementPriority.fromFirestoreValue('info'),
-          AnnouncementPriority.info);
-      expect(AnnouncementPriority.fromFirestoreValue('warning'),
-          AnnouncementPriority.warning);
-      expect(AnnouncementPriority.fromFirestoreValue('critical'),
-          AnnouncementPriority.critical);
+      expect(
+        AnnouncementPriority.fromFirestoreValue('info'),
+        AnnouncementPriority.info,
+      );
+      expect(
+        AnnouncementPriority.fromFirestoreValue('warning'),
+        AnnouncementPriority.warning,
+      );
+      expect(
+        AnnouncementPriority.fromFirestoreValue('critical'),
+        AnnouncementPriority.critical,
+      );
     });
 
     test('round-trips every value through serialize → deserialize', () {
@@ -211,17 +266,25 @@ void main() {
     });
 
     test('falls back to info on unknown / empty / missing / wrong-typed', () {
-      expect(AnnouncementPriority.fromFirestoreValue('emergency'),
-          AnnouncementPriority.info,
-          reason: 'forward-compat: an unknown future tier must not crash');
-      expect(AnnouncementPriority.fromFirestoreValue(''),
-          AnnouncementPriority.info);
-      expect(AnnouncementPriority.fromFirestoreValue(null),
-          AnnouncementPriority.info,
-          reason: 'a missing priority field must not crash the feed');
-      expect(AnnouncementPriority.fromFirestoreValue(42),
-          AnnouncementPriority.info,
-          reason: 'a wrong-typed value must not crash the feed');
+      expect(
+        AnnouncementPriority.fromFirestoreValue('emergency'),
+        AnnouncementPriority.info,
+        reason: 'forward-compat: an unknown future tier must not crash',
+      );
+      expect(
+        AnnouncementPriority.fromFirestoreValue(''),
+        AnnouncementPriority.info,
+      );
+      expect(
+        AnnouncementPriority.fromFirestoreValue(null),
+        AnnouncementPriority.info,
+        reason: 'a missing priority field must not crash the feed',
+      );
+      expect(
+        AnnouncementPriority.fromFirestoreValue(42),
+        AnnouncementPriority.info,
+        reason: 'a wrong-typed value must not crash the feed',
+      );
     });
   });
 
@@ -271,8 +334,7 @@ void main() {
       expect(emissions.last, isEmpty);
     });
 
-    test('reflects a newly posted announcement on the live stream',
-        () async {
+    test('reflects a newly posted announcement on the live stream', () async {
       final emissions = <List<Announcement>>[];
       final sub = repository.watchAnnouncements().listen(emissions.add);
       await settle();
@@ -295,28 +357,25 @@ void main() {
   // ═══════════════════════════════════════════════════════════════
 
   group('security invariants', () {
-    test(
-      'INVARIANT: postedBy / postedByRole are REQUIRED — no API path to an '
-      'unauthored announcement',
-      () async {
-        // Type-level assertion. postedBy and postedByRole are required named
-        // params: the method surface offers NO way to create an announcement
-        // with a missing or defaulted author. Forging another user's
-        // authorship is additionally blocked server-side — the write rule
-        // pins postedBy == request.auth.uid and
-        // postedByRole == request.auth.token.role.
-        await repository.postAnnouncement(
-          title: 'Authored',
-          body: 'Has an author by construction.',
-          postedBy: 'admin-001',
-          postedByRole: UserRole.admin,
-        );
+    test('INVARIANT: postedBy / postedByRole are REQUIRED — no API path to an '
+        'unauthored announcement', () async {
+      // Type-level assertion. postedBy and postedByRole are required named
+      // params: the method surface offers NO way to create an announcement
+      // with a missing or defaulted author. Forging another user's
+      // authorship is additionally blocked server-side — the write rule
+      // pins postedBy == request.auth.uid and
+      // postedByRole == request.auth.token.role.
+      await repository.postAnnouncement(
+        title: 'Authored',
+        body: 'Has an author by construction.',
+        postedBy: 'admin-001',
+        postedByRole: UserRole.admin,
+      );
 
-        final snap = await fakeFirestore.collection('announcements').get();
-        final data = snap.docs.single.data();
-        expect(data['postedBy'], 'admin-001');
-        expect(data['postedByRole'], 'admin');
-      },
-    );
+      final snap = await fakeFirestore.collection('announcements').get();
+      final data = snap.docs.single.data();
+      expect(data['postedBy'], 'admin-001');
+      expect(data['postedByRole'], 'admin');
+    });
   });
 }

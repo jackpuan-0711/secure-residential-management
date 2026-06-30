@@ -135,6 +135,37 @@ describe('ev_stations create / read / delete', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
+describe('ev_stations admin management', () => {
+  test('admin repairs a legacy out-of-service document → ALLOW', async () => {
+    await seedStation('st1', { status: 'outOfService', legacyOnline: false });
+    const db = adminCtx().firestore();
+    await assertSucceeds(
+      setDoc(doc(db, 'ev_stations', 'st1'), {
+        name: 'Station Alpha',
+        location: 'Basement 1',
+        status: 'available',
+        currentSessionId: null,
+      }),
+    );
+  });
+
+  test('admin edits location during an active session → ALLOW', async () => {
+    await seedStation('st1', { status: 'inUse', currentSessionId: 'sess-1' });
+    const db = adminCtx().firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'ev_stations', 'st1'), { location: 'Basement 3' }),
+    );
+  });
+
+  test('admin cannot change an active session id → DENY', async () => {
+    await seedStation('st1', { status: 'inUse', currentSessionId: 'sess-1' });
+    const db = adminCtx().firestore();
+    await assertFails(
+      updateDoc(doc(db, 'ev_stations', 'st1'), { currentSessionId: 'forged' }),
+    );
+  });
+});
+
 describe('ev_stations claim (available → inUse)', () => {
   test('verified resident direct bay claim is denied', async () => {
     await seedStation('st1', { status: 'available' });

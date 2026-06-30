@@ -306,9 +306,50 @@ describe('update', () => {
     await seed('seed1', seededDoc());
   });
 
-  test('admin in-place edit → DENY', async () => {
+  test('admin edits content with server edit audit → ALLOW', async () => {
     const db = adminCtx().firestore();
-    await assertFails(updateDoc(doc(db, 'announcements', 'seed1'), { title: 'edited' }));
+    await assertSucceeds(updateDoc(doc(db, 'announcements', 'seed1'), {
+      title: 'edited',
+      editedBy: 'admin-uid',
+      editedAt: serverTimestamp(),
+    }));
+  });
+
+  test('superadmin edits priority and pinning → ALLOW', async () => {
+    const db = superadminCtx().firestore();
+    await assertSucceeds(updateDoc(doc(db, 'announcements', 'seed1'), {
+      priority: 'critical',
+      pinned: true,
+      editedBy: 'super-uid',
+      editedAt: serverTimestamp(),
+    }));
+  });
+
+  test('resident edit → DENY', async () => {
+    const db = residentCtx().firestore();
+    await assertFails(updateDoc(doc(db, 'announcements', 'seed1'), {
+      title: 'forged',
+      editedBy: 'resident-uid',
+      editedAt: serverTimestamp(),
+    }));
+  });
+
+  test('admin changing original author → DENY', async () => {
+    const db = adminCtx().firestore();
+    await assertFails(updateDoc(doc(db, 'announcements', 'seed1'), {
+      postedBy: 'someone-else',
+      editedBy: 'admin-uid',
+      editedAt: serverTimestamp(),
+    }));
+  });
+
+  test('admin forging editedBy → DENY', async () => {
+    const db = adminCtx().firestore();
+    await assertFails(updateDoc(doc(db, 'announcements', 'seed1'), {
+      title: 'edited',
+      editedBy: 'someone-else',
+      editedAt: serverTimestamp(),
+    }));
   });
 });
 

@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../services/app_settings.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import 'about_screen.dart';
 import 'help_center_screen.dart';
 import 'privacy_security_screen.dart';
 
@@ -92,12 +93,7 @@ class SettingsScreen extends StatelessWidget {
           _SettingTile(
             icon: AppIcons.info,
             title: l10n.settingsAbout,
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: l10n.appTitle,
-              applicationLegalese:
-                  'Copyright ${DateTime.now().year} ${l10n.aboutCopyright}',
-            ),
+            onTap: () => _open(context, const AboutScreen()),
           ),
         ],
       ),

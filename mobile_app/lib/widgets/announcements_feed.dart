@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/announcement.dart';
 import '../services/announcement_repository.dart';
+import '../screens/post_announcement_screen.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
@@ -17,8 +18,15 @@ import '../theme/app_theme.dart';
 class AnnouncementsFeed extends StatefulWidget {
   /// Injectable for tests; defaults to a live [AnnouncementRepository].
   final AnnouncementRepository? repository;
+  final String? editorUid;
+  final UserRole? editorRole;
 
-  const AnnouncementsFeed({super.key, this.repository});
+  const AnnouncementsFeed({
+    super.key,
+    this.repository,
+    this.editorUid,
+    this.editorRole,
+  });
 
   @override
   State<AnnouncementsFeed> createState() => _AnnouncementsFeedState();
@@ -68,7 +76,22 @@ class _AnnouncementsFeedState extends State<AnnouncementsFeed> {
                 children: [
                   for (var i = 0; i < items.length; i++) ...[
                     if (i > 0) const SizedBox(height: AppSpacing.md),
-                    _AnnouncementCard(announcement: items[i]),
+                    _AnnouncementCard(
+                      announcement: items[i],
+                      onEdit:
+                          widget.editorUid == null || widget.editorRole == null
+                          ? null
+                          : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PostAnnouncementScreen(
+                                  postedBy: widget.editorUid!,
+                                  postedByRole: widget.editorRole!,
+                                  announcement: items[i],
+                                  repository: _repo,
+                                ),
+                              ),
+                            ),
+                    ),
                   ],
                 ],
               ),
@@ -82,8 +105,9 @@ class _AnnouncementsFeedState extends State<AnnouncementsFeed> {
 
 class _AnnouncementCard extends StatelessWidget {
   final Announcement announcement;
+  final VoidCallback? onEdit;
 
-  const _AnnouncementCard({required this.announcement});
+  const _AnnouncementCard({required this.announcement, this.onEdit});
 
   @override
   Widget build(BuildContext context) {
@@ -117,6 +141,15 @@ class _AnnouncementCard extends StatelessWidget {
                           color: cs.onSurfaceVariant,
                         ),
                       ],
+                      if (onEdit != null) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        IconButton(
+                          tooltip: 'Edit announcement',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: onEdit,
+                          icon: const Icon(AppIcons.edit, size: 18),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -130,7 +163,8 @@ class _AnnouncementCard extends StatelessWidget {
                   Text(
                     '${_priorityLabel(announcement.priority)} · '
                     '${_roleLabel(announcement.postedByRole)} · '
-                    '${_relativeTime(announcement.postedAt)}',
+                    '${_relativeTime(announcement.postedAt)}'
+                    '${announcement.editedAt == null ? '' : ' · Edited ${_relativeTime(announcement.editedAt!)}'}',
                     style: tt.labelSmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
                 ],
@@ -221,7 +255,11 @@ class _FeedEmpty extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(AppIcons.announcementsOutlined, size: 48, color: cs.onSurfaceVariant),
+          Icon(
+            AppIcons.announcementsOutlined,
+            size: 48,
+            color: cs.onSurfaceVariant,
+          ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'No announcements yet.',

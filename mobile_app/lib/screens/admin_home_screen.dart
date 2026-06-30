@@ -196,7 +196,7 @@ class _AnnouncementsTab extends StatelessWidget {
       children: [
         PostAnnouncementEntry(postedBy: identity.uid, postedByRole: role),
         const SizedBox(height: AppSpacing.md),
-        const AnnouncementsFeed(),
+        AnnouncementsFeed(editorUid: identity.uid, editorRole: role),
         const SizedBox(height: AppSpacing.md),
       ],
     );

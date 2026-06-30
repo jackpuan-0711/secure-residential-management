@@ -83,7 +83,10 @@ class AuthService {
     UserRole? role;
     try {
       // Force refresh (the `true` argument) — see authStateChanges doc.
-      final token = await user.getIdTokenResult(true);
+      // Never force-refresh from inside idTokenChanges. A forced refresh emits
+      // another token event and can recursively leave the app on the splash.
+      // refreshCurrentUserClaims() is the single explicit force-refresh path.
+      final token = await user.getIdTokenResult(false);
       role = _roleFromClaim(token.claims?['role']);
     } catch (_) {
       // Token read failed (offline / transient). Fall back to no role —

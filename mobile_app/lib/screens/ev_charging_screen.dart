@@ -7,6 +7,7 @@ import '../models/ev_station.dart';
 import '../services/ev_charging_repository.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
+import '../widgets/ev_device_status_line.dart';
 
 /// Resident-facing EV charging: see every bay's live state, start a session on
 /// an available bay, stop your own, and review your charging history.
@@ -38,7 +39,7 @@ class _EvChargingScreenState extends State<EvChargingScreen> {
   void initState() {
     super.initState();
     _repo = widget.repository ?? EvChargingRepository();
-    _stations = _repo.watchStations();
+    _stations = _repo.watchConfiguredStation();
     _mySessions = _repo.watchMySessions(widget.user.uid);
   }
 
@@ -223,18 +224,13 @@ class _StationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final (statusLabel, statusColor) = _stationVisual(
-      station.status,
-      isMine,
-      cs,
-    );
 
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
-            Icon(AppIcons.evCharging, size: 36, color: statusColor),
+            Icon(AppIcons.evCharging, size: 36, color: cs.primary),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
@@ -246,22 +242,8 @@ class _StationCard extends StatelessWidget {
                     station.location,
                     style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Row(
-                    children: [
-                      Icon(Icons.circle, size: 10, color: statusColor),
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        statusLabel,
-                        style: tt.labelMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  _DeviceStatusLine(stream: deviceStatus),
+                  const SizedBox(height: AppSpacing.sm),
+                  EvDeviceStatusLine(stream: deviceStatus, prominent: true),
                 ],
               ),
             ),
@@ -287,48 +269,6 @@ class _StationCard extends StatelessWidget {
       );
     }
     return const SizedBox.shrink();
-  }
-}
-
-class _DeviceStatusLine extends StatelessWidget {
-  final Stream<EvDeviceStatus?> stream;
-
-  const _DeviceStatusLine({required this.stream});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-
-    return StreamBuilder<EvDeviceStatus?>(
-      stream: stream,
-      builder: (context, snapshot) {
-        final status = snapshot.data;
-        final (label, color) = switch (status) {
-          EvDeviceStatus(online: true, state: EvDeviceState.charging) => (
-            'Device: Charging',
-            AppColors.success,
-          ),
-          EvDeviceStatus(online: true, state: EvDeviceState.idle) => (
-            'Device: Idle',
-            cs.onSurfaceVariant,
-          ),
-          EvDeviceStatus(online: true) => (
-            'Device: Unknown',
-            cs.onSurfaceVariant,
-          ),
-          _ => ('Device: No signal', cs.error),
-        };
-
-        return Row(
-          children: [
-            Icon(Icons.sensors, size: 14, color: color),
-            const SizedBox(width: AppSpacing.xs),
-            Text(label, style: tt.bodySmall?.copyWith(color: color)),
-          ],
-        );
-      },
-    );
   }
 }
 
@@ -369,20 +309,6 @@ class _SessionTile extends StatelessWidget {
         style: tt.labelLarge?.copyWith(color: cs.primary),
       ),
     );
-  }
-}
-
-/// Station status → (label, colour), from the resident's point of view (their
-/// own in-use bay reads "Charging"). Status colours are the documented theme
-/// exception (see AnnouncementsFeed).
-(String, Color) _stationVisual(EvStationStatus s, bool isMine, ColorScheme cs) {
-  switch (s) {
-    case EvStationStatus.available:
-      return ('Available', AppColors.success);
-    case EvStationStatus.inUse:
-      return (isMine ? 'Charging — yours' : 'In use', cs.primary);
-    case EvStationStatus.offline:
-      return ('Out of service', cs.onSurfaceVariant);
   }
 }
 

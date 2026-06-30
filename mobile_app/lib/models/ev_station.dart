@@ -36,6 +36,8 @@ enum EvDeviceState {
   static EvDeviceState fromFirestoreValue(Object? value) {
     return switch (value) {
       'idle' => EvDeviceState.idle,
+      // Compatibility with the prototype firmware's non-charging state.
+      'available' => EvDeviceState.idle,
       'charging' => EvDeviceState.charging,
       _ => EvDeviceState.unknown,
     };
@@ -48,13 +50,30 @@ class EvDeviceStatus {
   final EvDeviceState state;
   final int adc;
   final bool online;
+  final DateTime? lastSeenAt;
 
   const EvDeviceStatus({
     required this.stationId,
     required this.state,
     required this.adc,
     required this.online,
+    required this.lastSeenAt,
   });
+
+  // Allow two 30-second heartbeats plus network delay.
+  static const connectionTimeout = Duration(seconds: 75);
+
+  bool isConnectedAt(DateTime now) {
+    if (!online) return false;
+    final lastSeen = lastSeenAt;
+    // A device cannot prove that it is connected without a recent heartbeat.
+    // Failing closed prevents unplugged hardware from appearing online forever.
+    if (lastSeen == null) return false;
+    final age = now.difference(lastSeen);
+    // The phone clock may be slightly behind Firebase's trusted server clock.
+    // A negative age still represents fresh telemetry.
+    return age <= connectionTimeout;
+  }
 
   factory EvDeviceStatus.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
@@ -70,6 +89,7 @@ class EvDeviceStatus {
       state: EvDeviceState.fromFirestoreValue(data['state']),
       adc: (data['adc'] as num?)?.toInt() ?? 0,
       online: data['online'] == true,
+      lastSeenAt: (data['lastSeenAt'] as Timestamp?)?.toDate(),
     );
   }
 }
@@ -114,12 +134,13 @@ class EvStation {
     final rawName = data['name'];
     final rawLocation = data['location'];
     final rawSessionId = data['currentSessionId'];
-    final hasValidShape =
-        rawName is String &&
-        rawName.trim().isNotEmpty &&
-        rawLocation is String &&
-        (rawSessionId == null || rawSessionId is String);
     final parsedStatus = EvStationStatus.fromFirestoreValue(data['status']);
+    final hasValidSessionShape = switch (parsedStatus) {
+      EvStationStatus.inUse =>
+        rawSessionId is String && rawSessionId.trim().isNotEmpty,
+      EvStationStatus.available ||
+      EvStationStatus.offline => rawSessionId == null,
+    };
 
     return EvStation(
       id: snapshot.id,
@@ -127,7 +148,7 @@ class EvStation {
           ? rawName
           : 'Charging station',
       location: rawLocation is String ? rawLocation : 'Location unavailable',
-      status: hasValidShape ? parsedStatus : EvStationStatus.offline,
+      status: hasValidSessionShape ? parsedStatus : EvStationStatus.offline,
       currentSessionId: rawSessionId is String ? rawSessionId : null,
     );
   }

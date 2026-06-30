@@ -67,7 +67,7 @@ function validPayload(uid, unit, overrides = {}) {
     visitorName: 'Jane Tan',
     visitorContact: '012-345 6789',
     guestCount: 1,
-    vehiclePlate: null,
+    vehiclePlate: 'WXY 1234',
     visitDate: FUTURE(),
     eta: '6:00 PM',
     status: 'active',
@@ -107,7 +107,7 @@ async function seedPass(id, data) {
       visitorName: 'Jane Tan',
       visitorContact: '012',
       guestCount: 1,
-      vehiclePlate: null,
+      vehiclePlate: 'WXY 1234',
       visitDate: Timestamp.fromDate(new Date(Date.now() - 1000)),
       eta: '6:00 PM',
       status: 'active',
@@ -149,6 +149,22 @@ describe('create', () => {
     const db = residentCtx().firestore();
     await assertSucceeds(
       setDoc(doc(db, 'visitor_invitations', 't1'), validPayload('resident-uid', 'A-12-5')),
+    );
+  });
+
+  test('missing or empty vehicle plate → DENY', async () => {
+    const db = residentCtx().firestore();
+    await assertFails(
+      setDoc(
+        doc(db, 'visitor_invitations', 'missing-plate'),
+        validPayload('resident-uid', 'A-12-5', { vehiclePlate: null }),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(db, 'visitor_invitations', 'empty-plate'),
+        validPayload('resident-uid', 'A-12-5', { vehiclePlate: '' }),
+      ),
     );
   });
 

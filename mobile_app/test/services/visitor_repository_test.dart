@@ -27,7 +27,7 @@ void main() {
     String visitorName = 'Jane Tan',
     String visitorContact = '012-345 6789',
     int guestCount = 1,
-    String? vehiclePlate,
+    String vehiclePlate = 'WXY 1234',
     DateTime? visitDate,
     String eta = '6:00 PM',
   }) {
@@ -94,14 +94,11 @@ void main() {
       expect(inv.expiresAt, DateTime(2026, 7, 1, 23, 59, 59));
     });
 
-    test('normalises an empty / whitespace vehicle plate to null', () async {
-      final inv = await createOne(vehiclePlate: '   ');
-      expect(inv.vehiclePlate, isNull);
-      final data = await firestore
-          .collection('visitor_invitations')
-          .doc(inv.invitationId)
-          .get();
-      expect(data.data()!['vehiclePlate'], isNull);
+    test('rejects an empty / whitespace vehicle plate', () async {
+      expect(
+        () => createOne(vehiclePlate: '   '),
+        throwsA(isA<VisitorRepositoryException>()),
+      );
     });
 
     test('persists a group visitor count', () async {

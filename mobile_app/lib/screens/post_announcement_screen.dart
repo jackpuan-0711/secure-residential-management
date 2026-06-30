@@ -22,6 +22,7 @@ import '../theme/app_theme.dart';
 class PostAnnouncementScreen extends StatefulWidget {
   final String postedBy;
   final UserRole postedByRole;
+  final Announcement? announcement;
 
   /// Injectable for tests; defaults to a live [AnnouncementRepository].
   final AnnouncementRepository? repository;
@@ -30,6 +31,7 @@ class PostAnnouncementScreen extends StatefulWidget {
     super.key,
     required this.postedBy,
     required this.postedByRole,
+    this.announcement,
     this.repository,
   });
 
@@ -55,6 +57,13 @@ class _PostAnnouncementScreenState extends State<PostAnnouncementScreen> {
   void initState() {
     super.initState();
     _repo = widget.repository ?? AnnouncementRepository();
+    final announcement = widget.announcement;
+    if (announcement != null) {
+      _titleCtrl.text = announcement.title;
+      _bodyCtrl.text = announcement.body;
+      _priority = announcement.priority;
+      _pinned = announcement.pinned;
+    }
   }
 
   @override
@@ -77,14 +86,26 @@ class _PostAnnouncementScreenState extends State<PostAnnouncementScreen> {
 
     setState(() => _submitting = true);
     try {
-      await _repo.postAnnouncement(
-        title: _titleCtrl.text.trim(),
-        body: _bodyCtrl.text.trim(),
-        postedBy: widget.postedBy,
-        postedByRole: widget.postedByRole,
-        priority: _priority,
-        pinned: _pinned,
-      );
+      final announcement = widget.announcement;
+      if (announcement == null) {
+        await _repo.postAnnouncement(
+          title: _titleCtrl.text.trim(),
+          body: _bodyCtrl.text.trim(),
+          postedBy: widget.postedBy,
+          postedByRole: widget.postedByRole,
+          priority: _priority,
+          pinned: _pinned,
+        );
+      } else {
+        await _repo.updateAnnouncement(
+          announcementId: announcement.id,
+          title: _titleCtrl.text.trim(),
+          body: _bodyCtrl.text.trim(),
+          editedBy: widget.postedBy,
+          priority: _priority,
+          pinned: _pinned,
+        );
+      }
       if (!mounted) return;
       // Close back to the home; its AnnouncementsFeed updates live via the
       // Firestore stream, so there is nothing to pass back.
@@ -94,17 +115,15 @@ class _PostAnnouncementScreenState extends State<PostAnnouncementScreen> {
       // do NOT assume success.
       if (!mounted) return;
       setState(() => _submitting = false);
-      _toast('Could not post announcement: $e', isError: true);
+      final action = widget.announcement == null ? 'post' : 'update';
+      _toast('Could not $action announcement: $e', isError: true);
     }
   }
 
   void _toast(String text, {bool isError = false}) {
     final cs = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: isError ? cs.error : null,
-      ),
+      SnackBar(content: Text(text), backgroundColor: isError ? cs.error : null),
     );
   }
 
@@ -114,7 +133,13 @@ class _PostAnnouncementScreenState extends State<PostAnnouncementScreen> {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('New announcement')),
+      appBar: AppBar(
+        title: Text(
+          widget.announcement == null
+              ? 'New announcement'
+              : 'Edit announcement',
+        ),
+      ),
       body: SafeArea(
         // Block interaction (incl. re-taps) while the write is in flight.
         child: AbsorbPointer(
@@ -206,7 +231,13 @@ class _PostAnnouncementScreenState extends State<PostAnnouncementScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(AppIcons.announcements),
-                  label: Text(_submitting ? 'Posting…' : 'Post announcement'),
+                  label: Text(
+                    _submitting
+                        ? (widget.announcement == null ? 'Posting…' : 'Saving…')
+                        : (widget.announcement == null
+                              ? 'Post announcement'
+                              : 'Save changes'),
+                  ),
                 ),
               ],
             ),

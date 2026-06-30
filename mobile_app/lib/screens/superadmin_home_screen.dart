@@ -44,7 +44,7 @@ class _SuperadminHomeScreenState extends State<SuperadminHomeScreen> {
         onOpenAnnouncements: () => setState(() => _index = 4),
       ),
       const _ResidentsTab(),
-      _AdminsTab(actorUid: widget.identity.uid),
+      const _AdminsTab(),
       _OperationsTab(identity: widget.identity),
       _AnnouncementsTab(identity: widget.identity, role: UserRole.superadmin),
     ];
@@ -184,15 +184,13 @@ class _ResidentsTab extends StatelessWidget {
 }
 
 class _AdminsTab extends StatelessWidget {
-  final String actorUid;
-
-  const _AdminsTab({required this.actorUid});
+  const _AdminsTab();
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      children: [AdminManagementSection(actorUid: actorUid)],
+      children: [AdminManagementSection()],
     );
   }
 }
@@ -230,7 +228,7 @@ class _AnnouncementsTab extends StatelessWidget {
       children: [
         PostAnnouncementEntry(postedBy: identity.uid, postedByRole: role),
         const SizedBox(height: AppSpacing.md),
-        const AnnouncementsFeed(),
+        AnnouncementsFeed(editorUid: identity.uid, editorRole: role),
         const SizedBox(height: AppSpacing.md),
       ],
     );

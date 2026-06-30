@@ -28,12 +28,18 @@ class EvChargingException implements Exception {
 ///   Claim and release are TRANSACTIONS so the bay's status and the session
 ///   move atomically and two residents can't claim the same bay in a race.
 class EvChargingRepository {
+  static const defaultStationId = 'q0mfxs4doqGSBxlAJVU3';
+
+  static const defaultStationName = 'Charger 1';
+  static const defaultStationLocation = 'Parking A1';
   final FirebaseFirestore _firestore;
   final ManagementBackendService? _backend;
+  final String stationId;
 
   EvChargingRepository({
     FirebaseFirestore? firestore,
     ManagementBackendService? backend,
+    this.stationId = defaultStationId,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _backend = backend;
 
@@ -57,6 +63,40 @@ class EvChargingRepository {
           (snap) =>
               snap.docs.map((d) => EvStation.fromFirestore(d, null)).toList(),
         );
+  }
+
+  /// The single physical charger registered to this application.
+  Stream<List<EvStation>> watchConfiguredStation() {
+    return _stations.doc(stationId).snapshots().map((snapshot) {
+      if (!snapshot.exists) {
+        return <EvStation>[
+          EvStation(
+            id: stationId,
+            name: defaultStationName,
+            location: defaultStationLocation,
+            status: EvStationStatus.offline,
+          ),
+        ];
+      }
+      return <EvStation>[EvStation.fromFirestore(snapshot, null)];
+    });
+  }
+
+  /// Creates the one configured station at its deterministic document ID.
+  /// Existing station data is left untouched.
+  Future<void> ensureConfiguredStation() async {
+    final reference = _stations.doc(stationId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      if (snapshot.exists) return;
+
+      transaction.set(reference, {
+        'name': defaultStationName,
+        'location': defaultStationLocation,
+        'status': EvStationStatus.available.toFirestoreValue(),
+        'currentSessionId': null,
+      });
+    });
   }
 
   /// Physical state reported by the ESP32 assigned to [stationId].
@@ -208,11 +248,26 @@ class EvChargingRepository {
     required String stationId,
     required bool offline,
   }) async {
-    await _stations.doc(stationId).update({
-      'status': offline
-          ? EvStationStatus.offline.toFirestoreValue()
-          : EvStationStatus.available.toFirestoreValue(),
-      'currentSessionId': null,
+    final ref = _stations.doc(stationId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      if (!snapshot.exists) {
+        throw const EvChargingException('Charging station not found.');
+      }
+      final data = snapshot.data()!;
+      if (data['status'] == EvStationStatus.inUse.toFirestoreValue()) {
+        throw const EvChargingException(
+          'End the active charging session before changing service status.',
+        );
+      }
+      transaction.set(ref, {
+        'name': _validStationName(data['name']),
+        'location': _validStationLocation(data['location']),
+        'status': offline
+            ? EvStationStatus.offline.toFirestoreValue()
+            : EvStationStatus.available.toFirestoreValue(),
+        'currentSessionId': null,
+      });
     });
   }
 
@@ -222,10 +277,39 @@ class EvChargingRepository {
     required String name,
     required String location,
   }) async {
-    await _stations.doc(stationId).update({
-      'name': name.trim(),
-      'location': location.trim(),
+    final ref = _stations.doc(stationId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      if (!snapshot.exists) {
+        throw const EvChargingException('Charging station not found.');
+      }
+      final data = snapshot.data()!;
+      final status = EvStationStatus.fromFirestoreValue(data['status']);
+      final sessionId = data['currentSessionId'];
+      final hasActiveSession =
+          status == EvStationStatus.inUse &&
+          sessionId is String &&
+          sessionId.isNotEmpty;
+      transaction.set(ref, {
+        'name': name.trim(),
+        'location': location.trim(),
+        'status': hasActiveSession
+            ? EvStationStatus.inUse.toFirestoreValue()
+            : status == EvStationStatus.available
+            ? EvStationStatus.available.toFirestoreValue()
+            : EvStationStatus.offline.toFirestoreValue(),
+        'currentSessionId': hasActiveSession ? sessionId : null,
+      });
     });
+  }
+
+  String _validStationName(Object? value) {
+    final name = value is String ? value.trim() : '';
+    return name.isEmpty ? 'Charging station' : name;
+  }
+
+  String _validStationLocation(Object? value) {
+    return value is String ? value.trim() : '';
   }
 
   /// Admin/superadmin closes the active session on a bay.

@@ -1052,4 +1052,74 @@ void main() {
       },
     );
   });
+  group('administrator management', () {
+    test('searches an existing public account case-insensitively', () async {
+      await repository.createPublicProfile(
+        uid: 'candidate-1',
+        email: 'Candidate@Example.com',
+        name: 'Candidate One',
+      );
+
+      final candidate = await repository.findAdminCandidateByEmail(
+        'candidate@example.com',
+      );
+
+      expect(candidate.uid, 'candidate-1');
+      expect(candidate.role, UserRole.public);
+    });
+
+    test('promotes and removes an administrator with audit fields', () async {
+      await repository.createPublicProfile(
+        uid: 'candidate-1',
+        email: 'candidate@example.com',
+        name: 'Candidate One',
+      );
+
+      await repository.promoteToAdministrator(
+        targetUid: 'candidate-1',
+        approvedByUid: 'super-1',
+      );
+
+      var data =
+          (await fakeFirestore.collection('users').doc('candidate-1').get())
+              .data()!;
+      expect(data['role'], 'admin');
+      expect(data['approvedBy'], 'super-1');
+      expect(data['approvedAt'], isA<Timestamp>());
+
+      final admins = await repository.watchAdministrators().first;
+      expect(admins.map((user) => user.uid), contains('candidate-1'));
+
+      await repository.removeAdministratorPermission(
+        targetUid: 'candidate-1',
+        removedByUid: 'super-1',
+      );
+
+      data = (await fakeFirestore.collection('users').doc('candidate-1').get())
+          .data()!;
+      expect(data['role'], 'public');
+      expect(data['approvedAt'], isNull);
+      expect(data['approvedBy'], isNull);
+      expect(data['adminRemovedBy'], 'super-1');
+      expect(data['adminRemovedAt'], isA<Timestamp>());
+    });
+
+    test('does not return missing or pending accounts as candidates', () async {
+      await repository.createUserProfile(
+        uid: 'pending-1',
+        email: 'pending@example.com',
+        name: 'Pending Resident',
+        requestedUnit: 'A-1-1',
+      );
+
+      expect(
+        () => repository.findAdminCandidateByEmail('missing@example.com'),
+        throwsA(isA<UserRepositoryException>()),
+      );
+      expect(
+        () => repository.findAdminCandidateByEmail('pending@example.com'),
+        throwsA(isA<UserRepositoryException>()),
+      );
+    });
+  });
 }

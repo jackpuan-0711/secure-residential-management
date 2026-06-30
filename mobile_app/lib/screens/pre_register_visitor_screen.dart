@@ -92,8 +92,10 @@ class _PreRegisterVisitorScreenState extends State<PreRegisterVisitorScreen> {
     // Defensive: this screen is only reachable from a verified resident home,
     // but never issue a pass without an issuer + verified unit.
     if (widget.residentId.isEmpty || widget.unitNumber.isEmpty) {
-      _toast('Your unit is not verified yet — cannot issue a pass.',
-          isError: true);
+      _toast(
+        'Your unit is not verified yet — cannot issue a pass.',
+        isError: true,
+      );
       return;
     }
 
@@ -122,10 +124,7 @@ class _PreRegisterVisitorScreenState extends State<PreRegisterVisitorScreen> {
   void _toast(String text, {bool isError = false}) {
     final cs = Theme.of(context).colorScheme;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(text),
-        backgroundColor: isError ? cs.error : null,
-      ),
+      SnackBar(content: Text(text), backgroundColor: isError ? cs.error : null),
     );
   }
 
@@ -212,12 +211,13 @@ class _PreRegisterVisitorScreenState extends State<PreRegisterVisitorScreen> {
                   maxLength: _maxPlate,
                   textCapitalization: TextCapitalization.characters,
                   decoration: const InputDecoration(
-                    labelText: 'Vehicle plate (optional)',
+                    labelText: 'Vehicle plate',
                     hintText: 'e.g. WXY 1234',
                     prefixIcon: Icon(Icons.directions_car_rounded),
                   ),
                   validator: (value) {
                     final t = (value ?? '').trim();
+                    if (t.isEmpty) return 'Vehicle plate is required.';
                     if (t.length > _maxPlate) return 'Plate is too long.';
                     return null;
                   },
@@ -280,10 +280,7 @@ class _PickerTile extends StatelessWidget {
       borderRadius: AppRadius.lgBr,
       onTap: onTap,
       child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-        ),
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [

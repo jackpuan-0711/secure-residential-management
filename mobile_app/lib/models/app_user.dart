@@ -124,27 +124,75 @@ class AppUser {
       throw StateError('User document "${snapshot.id}" has no data');
     }
 
+    final rawEmail = data['email'];
+    final rawName = data['name'];
+    final rawRole = data['role'];
+    final rawStatus = data['status'];
+    final createdAt = data['createdAt'];
+    final updatedAt = data['updatedAt'];
+    final fallbackDate = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+    UserRole parseRole(Object? value) {
+      if (value is! String) return UserRole.public;
+      try {
+        return UserRole.fromFirestoreValue(value);
+      } on ArgumentError {
+        return UserRole.public;
+      }
+    }
+
+    UserStatus parseStatus(Object? value) {
+      if (value is! String) return UserStatus.suspended;
+      try {
+        return UserStatus.fromFirestoreValue(value);
+      } on ArgumentError {
+        return UserStatus.suspended;
+      }
+    }
+
+    final email = rawEmail is String ? rawEmail.trim() : '';
+    final name = rawName is String && rawName.trim().isNotEmpty
+        ? rawName.trim()
+        : (email.isEmpty ? 'Account' : email.split('@').first);
+
     return AppUser(
       uid: snapshot.id,
-      email: data['email'] as String,
-      name: data['name'] as String,
-      role: UserRole.fromFirestoreValue(data['role'] as String),
-      status: UserStatus.fromFirestoreValue(data['status'] as String),
-      requestedRole: data['requestedRole'] != null
-          ? UserRole.fromFirestoreValue(data['requestedRole'] as String)
+      email: email,
+      name: name,
+      role: parseRole(rawRole),
+      status: parseStatus(rawStatus),
+      requestedRole: data['requestedRole'] is String
+          ? parseRole(data['requestedRole'])
           : null,
-      requestedUnit: data['requestedUnit'] as String?,
-      unitNumber: data['unitNumber'] as String?,
-      phoneNumber: data['phoneNumber'] as String?,
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
-      updatedAt: (data['updatedAt'] as Timestamp).toDate(),
-      approvedAt: (data['approvedAt'] as Timestamp?)?.toDate(),
-      approvedBy: data['approvedBy'] as String?,
-      rejectedAt: (data['rejectedAt'] as Timestamp?)?.toDate(),
-      rejectedBy: data['rejectedBy'] as String?,
-      mfaEnrolled: data['mfaEnrolled'] as bool? ?? false,
+      requestedUnit: data['requestedUnit'] is String
+          ? data['requestedUnit'] as String
+          : null,
+      unitNumber: data['unitNumber'] is String
+          ? data['unitNumber'] as String
+          : null,
+      phoneNumber: data['phoneNumber'] is String
+          ? data['phoneNumber'] as String
+          : null,
+      createdAt: createdAt is Timestamp ? createdAt.toDate() : fallbackDate,
+      updatedAt: updatedAt is Timestamp
+          ? updatedAt.toDate()
+          : (createdAt is Timestamp ? createdAt.toDate() : fallbackDate),
+      approvedAt: data['approvedAt'] is Timestamp
+          ? (data['approvedAt'] as Timestamp).toDate()
+          : null,
+      approvedBy: data['approvedBy'] is String
+          ? data['approvedBy'] as String
+          : null,
+      rejectedAt: data['rejectedAt'] is Timestamp
+          ? (data['rejectedAt'] as Timestamp).toDate()
+          : null,
+      rejectedBy: data['rejectedBy'] is String
+          ? data['rejectedBy'] as String
+          : null,
+      mfaEnrolled: data['mfaEnrolled'] == true,
       fcmTokens:
-          (data['fcmTokens'] as List<dynamic>?)?.cast<String>() ?? const [],
+          (data['fcmTokens'] as List<dynamic>?)?.whereType<String>().toList() ??
+          const [],
     );
   }
 
@@ -161,11 +209,9 @@ class AppUser {
       'phoneNumber': phoneNumber,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': FieldValue.serverTimestamp(),
-      'approvedAt':
-          approvedAt != null ? Timestamp.fromDate(approvedAt!) : null,
+      'approvedAt': approvedAt != null ? Timestamp.fromDate(approvedAt!) : null,
       'approvedBy': approvedBy,
-      'rejectedAt':
-          rejectedAt != null ? Timestamp.fromDate(rejectedAt!) : null,
+      'rejectedAt': rejectedAt != null ? Timestamp.fromDate(rejectedAt!) : null,
       'rejectedBy': rejectedBy,
       'mfaEnrolled': mfaEnrolled,
       'fcmTokens': fcmTokens,
@@ -181,6 +227,7 @@ class AppUser {
     String? requestedUnit,
     String? unitNumber,
     String? phoneNumber,
+    bool clearPhoneNumber = false,
     DateTime? updatedAt,
     DateTime? approvedAt,
     String? approvedBy,
@@ -198,7 +245,7 @@ class AppUser {
       requestedRole: requestedRole ?? this.requestedRole,
       requestedUnit: requestedUnit ?? this.requestedUnit,
       unitNumber: unitNumber ?? this.unitNumber,
-      phoneNumber: phoneNumber ?? this.phoneNumber,
+      phoneNumber: clearPhoneNumber ? null : phoneNumber ?? this.phoneNumber,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       approvedAt: approvedAt ?? this.approvedAt,

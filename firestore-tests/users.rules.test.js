@@ -292,6 +292,24 @@ describe('management transitions', () => {
       }),
     );
   });
+  test('superadmin promotes a legacy public profile without requestedRole', async () => {
+    const legacy = publicProfile('legacy-candidate');
+    delete legacy.requestedRole;
+    await seedUser('legacy-candidate', legacy);
+
+    const db = superadminCtx().firestore();
+    await assertSucceeds(
+      updateDoc(doc(db, 'users', 'legacy-candidate'), {
+        role: 'admin',
+        approvedAt: serverTimestamp(),
+        approvedBy: 'super-uid',
+        adminRemovedAt: null,
+        adminRemovedBy: null,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  });
+
 
   test('regular admin cannot add another administrator', async () => {
     const db = profileAdminCtx().firestore();

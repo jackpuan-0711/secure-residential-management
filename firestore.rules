@@ -3,11 +3,10 @@ rules_version = '2';
 // ─────────────────────────────────────────────────────────────────────
 // Secure Residential Management — Firestore rules
 //
-// Authorization invariant: every admin / superadmin gate below reads
-// `request.auth.token.role` (the Firebase Auth custom claim, signed
-// into the JWT and settable ONLY server-side). NEVER the Firestore
-// `role` field — that would let a tampered users/{uid}.role grant
-// access to itself (CWE-269).
+// Authorization invariant: superadmin access always comes from the signed
+// Firebase Auth claim. Administrator access may also come from the caller's
+// protected /users profile because only that superadmin can promote a profile;
+// owners cannot change their own role or status (CWE-269).
 // ─────────────────────────────────────────────────────────────────────
 
 service cloud.firestore {
@@ -183,9 +182,12 @@ service cloud.firestore {
           // Only the genesis superadmin may add or remove administrators.
           (hasSuperadminAccess()
             && incoming().status == 'active'
-            && incoming().requestedRole == existing().requestedRole
-            && incoming().requestedUnit == existing().requestedUnit
-            && incoming().unitNumber == existing().unitNumber
+            && incoming().get('requestedRole', null)
+                == existing().get('requestedRole', null)
+            && incoming().get('requestedUnit', null)
+                == existing().get('requestedUnit', null)
+            && incoming().get('unitNumber', null)
+                == existing().get('unitNumber', null)
             && (
               (existing().role == 'public'
                 && incoming().role == 'admin'
@@ -272,11 +274,25 @@ service cloud.firestore {
               'priority', 'pinned', 'postedAt']);
 
       // ── UPDATE ─────────────────────────────────────────────────────
-      // Immutable. A posted announcement is an audit-bearing broadcast;
-      // editing it in place would let the visible text drift from what
-      // residents were originally notified of. Correction = delete +
-      // repost, which leaves a cleaner trail than a silent in-place edit.
-      allow update: if false;
+      // Admin/superadmin may correct content. Original authorship and post time
+      // stay immutable, while every edit records the current actor and a
+      // server-authoritative edit time.
+      allow update: if hasAdminAccess()
+        && request.resource.data.postedBy == resource.data.postedBy
+        && request.resource.data.postedByRole == resource.data.postedByRole
+        && request.resource.data.postedAt == resource.data.postedAt
+        && request.resource.data.editedBy == request.auth.uid
+        && request.resource.data.editedAt == request.time
+        && request.resource.data.priority in ['info', 'warning', 'critical']
+        && request.resource.data.pinned is bool
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.body is string
+        && request.resource.data.body.size() <= 5000
+        && request.resource.data.keys().hasOnly(
+             ['title', 'body', 'postedBy', 'postedByRole', 'priority',
+              'pinned', 'postedAt', 'editedBy', 'editedAt']);
 
       // ── DELETE ─────────────────────────────────────────────────────
       // Admin / superadmin only (claim-gated): moderation and the delete
@@ -365,9 +381,9 @@ service cloud.firestore {
         && incoming().checkedInBy == null
         && incoming().checkedOutAt == null
         && incoming().checkedOutBy == null
-        && (incoming().vehiclePlate == null
-            || (incoming().vehiclePlate is string
-                && incoming().vehiclePlate.size() <= 20))
+        && incoming().vehiclePlate is string
+        && incoming().vehiclePlate.size() > 0
+        && incoming().vehiclePlate.size() <= 20
         && incoming().keys().hasOnly(
              ['residentId', 'unitNumber', 'visitorName', 'visitorContact',
               'guestCount', 'vehiclePlate', 'visitDate', 'eta', 'status',
@@ -573,9 +589,6 @@ service cloud.firestore {
         //     occupied bay).
         (
           hasAdminClaim()
-          && existing().status in ['available', 'offline']
-          && incoming().status in ['available', 'offline']
-          && incoming().currentSessionId == null
           && incoming().name is string
           && incoming().name.size() > 0
           && incoming().name.size() <= 100
@@ -583,6 +596,16 @@ service cloud.firestore {
           && incoming().location.size() <= 200
           && incoming().keys().hasOnly(
                ['name', 'location', 'status', 'currentSessionId'])
+          && (
+               (existing().status != 'inUse'
+                && incoming().status in ['available', 'offline']
+                && incoming().currentSessionId == null)
+               ||
+               (existing().status == 'inUse'
+                && incoming().status == 'inUse'
+                && incoming().currentSessionId == existing().currentSessionId
+                && affectedKeys().hasOnly(['name', 'location']))
+             )
         )
         ||
         // (b) resident CLAIM: available → inUse, only status + currentSessionId
@@ -717,12 +740,14 @@ service cloud.firestore {
       }
       function incoming() { return request.resource.data; }
       function validStatusPayload() {
-        return incoming().keys().hasOnly(['state', 'adc', 'online'])
-            && incoming().state in ['charging', 'idle']
+        return incoming().keys().hasOnly(
+                 ['state', 'adc', 'online', 'lastSeenAt'])
+            && incoming().state in ['charging', 'idle', 'available']
             && incoming().adc is int
             && incoming().adc >= 0
             && incoming().adc <= 4095
-            && incoming().online is bool;
+            && incoming().online is bool
+            && incoming().lastSeenAt == request.time;
       }
 
       allow read: if isVerifiedEmail();

@@ -230,6 +230,99 @@ export const rejectResident = onCall({ region }, async (request) => {
   return { ok: true };
 });
 
+export const listAdminAccounts = onCall({ region }, async (request) => {
+  requireVerifiedRole(request, ["superadmin"]);
+
+  const adminProfiles = await db.collection("users").where("role", "==", "admin").get();
+  const profiles = adminProfiles.docs;
+  const accounts = await Promise.all(profiles.map(async (profile) => {
+    const data = profile.data();
+    if (data.status !== "active") return null;
+
+    let authUser: admin.auth.UserRecord;
+    try {
+      authUser = await auth.getUser(profile.id);
+    } catch (error) {
+      if ((error as { code?: string }).code === "auth/user-not-found") {
+        // Keep the Firestore profile as an audit record, but never expose a
+        // deleted Auth account in the live administrator console.
+        return null;
+      }
+      throw error;
+    }
+
+    if (authUser.disabled || !authUser.email || !authUser.emailVerified) {
+      return null;
+    }
+
+    return {
+      uid: authUser.uid,
+      email: authUser.email.toLowerCase(),
+      name: typeof data.name === "string" ? data.name : authUser.displayName ?? "User",
+      createdAtMillis: Date.parse(authUser.metadata.creationTime),
+    };
+  }));
+
+  // A deleted account can leave an old profile behind and the same email can
+  // later be registered again under a new UID. Keep only the newest live Auth
+  // account for each email so the superadmin cannot accidentally choose stale
+  // profile data.
+  const newestByEmail = new Map<string, NonNullable<(typeof accounts)[number]>>();
+  for (const account of accounts) {
+    if (!account) continue;
+    const previous = newestByEmail.get(account.email);
+    if (!previous || account.createdAtMillis > previous.createdAtMillis) {
+      newestByEmail.set(account.email, account);
+    }
+  }
+
+  const current = [...newestByEmail.values()];
+  current.sort((a, b) => b.createdAtMillis - a.createdAtMillis);
+  return {
+    admins: current,
+  };
+});
+
+export const findAdminCandidate = onCall({ region }, async (request) => {
+  requireVerifiedRole(request, ["superadmin"]);
+  const email = requiredString(request.data, "email").toLowerCase();
+
+  let target: admin.auth.UserRecord;
+  try {
+    target = await auth.getUserByEmail(email);
+  } catch (error) {
+    if ((error as { code?: string }).code === "auth/user-not-found") {
+      throw new HttpsError("not-found", "No existing account uses this email.");
+    }
+    throw error;
+  }
+
+  if (target.disabled || !target.emailVerified || !target.email) {
+    throw new HttpsError(
+      "failed-precondition",
+      "The account must be enabled and email-verified.",
+    );
+  }
+
+  const profile = await db.collection("users").doc(target.uid).get();
+  const data = profile.data() ?? {};
+  if (!profile.exists || data.role !== "public" || readStatus(data) !== "active") {
+    throw new HttpsError(
+      "failed-precondition",
+      "Only an active public account can become an administrator.",
+    );
+  }
+
+  return {
+    candidate: {
+      uid: target.uid,
+      email: target.email.toLowerCase(),
+      name: typeof data.name === "string" ? data.name : target.displayName ?? "User",
+      createdAtMillis: Date.parse(target.metadata.creationTime),
+    },
+  };
+});
+
 export const addAdmin = onCall({ region }, async (request) => {
   const caller = requireVerifiedRole(request, ["superadmin"]);
   const email = requiredString(request.data, "email").toLowerCase();
@@ -257,6 +350,12 @@ export const addAdmin = onCall({ region }, async (request) => {
     throw new HttpsError(
       "failed-precondition",
       "The account must verify its email before it can become an administrator.",
+    );
+  }
+  if (target.disabled) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A disabled account cannot become an administrator.",
     );
   }
   if (target.customClaims?.role === "superadmin") {

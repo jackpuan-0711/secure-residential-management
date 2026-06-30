@@ -465,63 +465,87 @@ class UserRepository {
         );
   }
 
-  /// Live stream of active administrators for the superadmin console.
-  /// Role changes are performed by callable functions because the Firebase
-  /// Auth custom claim is the authorization boundary.
-  Stream<List<AppUser>> listAdmins() {
+  /// Live list used by the Spark-plan superadmin console.
+  Stream<List<AppUser>> watchAdministrators() {
     return _firestore
         .collection('users')
-        .where('role', isEqualTo: UserRole.admin.name)
+        .where('role', isEqualTo: UserRole.admin.toFirestoreValue())
         .snapshots()
-        .map((snap) {
-          final admins = snap.docs
-              .map((d) => AppUser.fromFirestore(d, null))
-              .where((u) => u.status == UserStatus.active)
+        .map((snapshot) {
+          final admins = snapshot.docs
+              .map((doc) => AppUser.fromFirestore(doc, null))
+              .where((user) => user.status == UserStatus.active)
               .toList();
-          admins.sort((a, b) => a.name.compareTo(b.name));
+          admins.sort(
+            (left, right) =>
+                left.name.toLowerCase().compareTo(right.name.toLowerCase()),
+          );
           return admins;
         });
   }
 
-  Future<List<AppUser>> listAdminCandidates() async {
+  /// Finds an existing signed-up app account by email.
+  Future<AppUser> findAdminCandidateByEmail(String email) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty || !normalizedEmail.contains('@')) {
+      throw const UserRepositoryException('Enter a complete email address.');
+    }
+
     final snapshot = await _firestore
         .collection('users')
-        .where('role', isEqualTo: UserRole.public.name)
+        .where('status', isEqualTo: UserStatus.active.toFirestoreValue())
         .get();
-    final users = snapshot.docs
-        .map((doc) => AppUser.fromFirestore(doc, null))
-        .where((user) => user.status == UserStatus.active)
-        .toList();
-    users.sort((a, b) => a.name.compareTo(b.name));
-    return users;
+
+    for (final doc in snapshot.docs) {
+      final user = AppUser.fromFirestore(doc, null);
+      if (user.email.toLowerCase() != normalizedEmail) continue;
+      if (user.role == UserRole.admin) {
+        throw const UserRepositoryException(
+          'This account is already an administrator.',
+        );
+      }
+      if (user.role != UserRole.public || user.requestedRole != null) {
+        throw const UserRepositoryException(
+          'Only an active public account with no pending request can be added.',
+        );
+      }
+      return user;
+    }
+
+    throw const UserRepositoryException(
+      'No active signed-up account was found for this email.',
+    );
   }
 
-  Future<void> addAdmin({
+  Future<void> promoteToAdministrator({
     required String targetUid,
     required String approvedByUid,
   }) async {
     if (targetUid == approvedByUid) {
       throw const UserRepositoryException(
-        'You cannot change your own superadmin access.',
+        'The superadmin account cannot promote itself.',
       );
     }
 
-    final ref = _firestore.collection('users').doc(targetUid);
+    final docRef = _firestore.collection('users').doc(targetUid);
     await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(ref);
+      final snapshot = await transaction.get(docRef);
       if (!snapshot.exists) {
-        throw const UserRepositoryException('Account not found.');
+        throw const UserRepositoryException(
+          'Cannot add an account that does not exist.',
+        );
       }
       final data = snapshot.data()!;
-      if (data['role'] != UserRole.public.name ||
-          data['status'] != UserStatus.active.toFirestoreValue()) {
+      if (data['role'] != UserRole.public.toFirestoreValue() ||
+          data['status'] != UserStatus.active.toFirestoreValue() ||
+          data['requestedRole'] != null) {
         throw const UserRepositoryException(
-          'Only an active public account can become an administrator.',
+          'Only an active public account with no pending request can be added.',
         );
       }
 
-      transaction.update(ref, {
-        'role': UserRole.admin.name,
+      transaction.update(docRef, {
+        'role': UserRole.admin.toFirestoreValue(),
         'approvedAt': FieldValue.serverTimestamp(),
         'approvedBy': approvedByUid,
         'adminRemovedAt': null,
@@ -531,25 +555,34 @@ class UserRepository {
     });
   }
 
-  Future<void> removeAdmin({
+  Future<void> removeAdministratorPermission({
     required String targetUid,
     required String removedByUid,
   }) async {
     if (targetUid == removedByUid) {
       throw const UserRepositoryException(
-        'You cannot remove your own superadmin access.',
+        'The superadmin account cannot remove its own access.',
       );
     }
 
-    final ref = _firestore.collection('users').doc(targetUid);
+    final docRef = _firestore.collection('users').doc(targetUid);
     await _firestore.runTransaction((transaction) async {
-      final snapshot = await transaction.get(ref);
-      if (!snapshot.exists || snapshot.data()?['role'] != UserRole.admin.name) {
-        throw const UserRepositoryException('Administrator not found.');
+      final snapshot = await transaction.get(docRef);
+      if (!snapshot.exists) {
+        throw const UserRepositoryException(
+          'Cannot remove an account that does not exist.',
+        );
+      }
+      final data = snapshot.data()!;
+      if (data['role'] != UserRole.admin.toFirestoreValue() ||
+          data['status'] != UserStatus.active.toFirestoreValue()) {
+        throw const UserRepositoryException(
+          'This account is not an active administrator.',
+        );
       }
 
-      transaction.update(ref, {
-        'role': UserRole.public.name,
+      transaction.update(docRef, {
+        'role': UserRole.public.toFirestoreValue(),
         'approvedAt': null,
         'approvedBy': null,
         'adminRemovedAt': FieldValue.serverTimestamp(),

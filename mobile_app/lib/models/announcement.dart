@@ -64,6 +64,11 @@ class Announcement {
   /// Server-authoritative post time (FieldValue.serverTimestamp at write).
   final DateTime postedAt;
 
+  /// Server-authoritative time and actor for the most recent edit. Null for
+  /// announcements that have never been edited.
+  final DateTime? editedAt;
+  final String? editedBy;
+
   final AnnouncementPriority priority;
   final bool pinned;
 
@@ -74,6 +79,8 @@ class Announcement {
     required this.postedBy,
     required this.postedByRole,
     required this.postedAt,
+    this.editedAt,
+    this.editedBy,
     required this.priority,
     required this.pinned,
   });
@@ -107,8 +114,7 @@ class Announcement {
       title: data['title'] as String,
       body: data['body'] as String,
       postedBy: data['postedBy'] as String,
-      postedByRole:
-          UserRole.fromFirestoreValue(data['postedByRole'] as String),
+      postedByRole: UserRole.fromFirestoreValue(data['postedByRole'] as String),
       // postedAt is always a server timestamp when persisted: the repository writes
       // FieldValue.serverTimestamp() and this model is read-only (never writes postedAt
       // back). The `?? DateTime.now()` fallback applies ONLY to the transient local
@@ -116,6 +122,8 @@ class Announcement {
       // author's own session — it is never persisted and reconciles to the server value
       // on the next snapshot. Hence not client-controllable.
       postedAt: (data['postedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      editedAt: (data['editedAt'] as Timestamp?)?.toDate(),
+      editedBy: data['editedBy'] as String?,
       priority: AnnouncementPriority.fromFirestoreValue(data['priority']),
       pinned: data['pinned'] as bool? ?? false,
     );
