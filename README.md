@@ -1,20 +1,51 @@
 # Secure Residential Management
 
-A Flutter + Firebase residential management app for residents, public users,
-admins, and superadmins.
+Secure Residential Management is a Flutter + Firebase application for gated
+residential communities. It combines resident onboarding, role-based
+administration, visitor QR passes, maintenance reporting, announcements, EV
+charging management, and device-level app protection in one mobile-first system.
+
+The project is designed as a security-focused final year project. Firebase Auth,
+custom claims, Firestore authorization rules, emulator-backed rules tests, and
+device-local app locking work together to protect resident data and prevent
+unauthorized privilege changes.
 
 ## Main Features
 
-- Email/password sign-up, email verification, profile completion, and role
-  routing.
-- Resident approval queue with rule-gated approval/rejection.
-- Superadmin-only administrator add/remove controls.
-- Announcements with admin/superadmin posting.
-- Resident visitor QR passes with gate check-in/check-out audit history,
-  maintenance requests, and EV charging.
-- A restricted gate-staff scanner with camera and manual-code validation.
-- Admin maintenance queue and EV station management.
-- Firestore security rules and emulator tests for the main collections.
+- Email/password authentication, email verification, profile completion, and
+  role-based routing for public users, residents, staff, admins, and
+  superadmins.
+- Fingerprint/biometric verification and a 6-digit app lock PIN for protected
+  signed-in sessions.
+- One-active-session protection with Firestore session markers, idle timeout,
+  and automatic sign-out when a session is replaced or expired.
+- Resident approval workflow where admins can approve resident applications or
+  reject users into public access.
+- Superadmin console for adding and removing administrator accounts without
+  allowing ordinary admins to self-promote or promote others.
+- Announcements module with admin/superadmin posting, editing, priority, pinning,
+  and rule-protected audit fields.
+- Visitor management with resident-generated QR passes, gate-staff scanning,
+  manual-code validation, check-in/check-out transitions, and audit history.
+- Maintenance request workflow for residents to submit unit issues and admins to
+  manage repair status.
+- EV charging module for residents to start, stop, and review charging sessions.
+- Admin EV station management with live device-status support for ESP32 charger
+  telemetry.
+- Firestore security rules and emulator tests covering users, sessions,
+  announcements, visitors, maintenance, EV charging, and IoT device status.
+
+## Latest Updates
+
+- Added fingerprint/biometric authentication on Android and iOS through native
+  platform integration.
+- Added a local 6-digit app lock PIN with hashed storage, retry cooldown, and
+  runtime unlock state.
+- Added secure session tracking so only the latest login remains active for an
+  account.
+- Updated privacy and security screens to manage app-lock behavior.
+- Added Firestore rules and tests for the new `auth_sessions` collection.
+- Improved EV charger administration and stabilized IoT device-status handling.
 
 ## Project Layout
 
@@ -23,6 +54,20 @@ admins, and superadmins.
 - `firestore.rules` - Firestore authorization rules.
 - `firestore-tests/` - Emulator-backed Firestore rules tests.
 - `tools/admin-bootstrap/` - one-time superadmin bootstrap script.
+
+## Security Model
+
+- Superadmin and staff access is controlled by signed Firebase Auth custom
+  claims.
+- Administrator access is stored in protected Firestore profiles and can only be
+  changed by the superadmin flow.
+- Residents cannot self-assign roles, verified units, approval status, or admin
+  privileges.
+- Firestore rules use owner checks, role checks, allowlisted fields, server
+  timestamps, and audit invariants to prevent unauthorized writes.
+- Visitor QR codes contain only opaque tokens, not visitor personal details.
+- App sessions are guarded by biometric verification, a device-local PIN, and
+  one-active-session enforcement.
 
 ## Run The App
 
