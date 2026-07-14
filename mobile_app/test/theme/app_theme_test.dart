@@ -37,14 +37,8 @@ void main() {
     });
 
     test('helper BorderRadius values match their scalar counterparts', () {
-      expect(
-        AppRadius.lgBr,
-        BorderRadius.circular(AppRadius.lg),
-      );
-      expect(
-        AppRadius.fullBr,
-        BorderRadius.circular(AppRadius.full),
-      );
+      expect(AppRadius.lgBr, BorderRadius.circular(AppRadius.lg));
+      expect(AppRadius.fullBr, BorderRadius.circular(AppRadius.full));
     });
   });
 
@@ -65,7 +59,10 @@ void main() {
 
     test('role badge pairs are distinct', () {
       expect(AppColors.roleBadgePublicFg, isNot(AppColors.roleBadgeResidentFg));
-      expect(AppColors.roleBadgeResidentFg, isNot(AppColors.roleBadgePendingFg));
+      expect(
+        AppColors.roleBadgeResidentFg,
+        isNot(AppColors.roleBadgePendingFg),
+      );
       expect(AppColors.roleBadgeAdminBg, equals(AppColors.primary));
     });
 
@@ -105,7 +102,9 @@ void main() {
       );
     });
 
-    testWidgets('theme propagates correctly through MaterialApp', (tester) async {
+    testWidgets('theme propagates correctly through MaterialApp', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light,
@@ -127,7 +126,10 @@ void main() {
             bottomNavigationBar: NavigationBar(
               destinations: const [
                 NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
-                NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
+                NavigationDestination(
+                  icon: Icon(Icons.settings),
+                  label: 'Settings',
+                ),
               ],
             ),
           ),

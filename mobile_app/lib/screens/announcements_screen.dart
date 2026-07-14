@@ -29,9 +29,7 @@ class AnnouncementsScreen extends StatelessWidget {
           final announcements = snapshot.data;
 
           if (announcements == null || announcements.isEmpty) {
-            return const Center(
-              child: Text('No announcements at this time.'),
-            );
+            return const Center(child: Text('No announcements at this time.'));
           }
 
           return ListView.builder(
@@ -102,10 +100,7 @@ class _AnnouncementCard extends StatelessWidget {
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text(
-              announcement.body,
-              style: tt.bodyMedium,
-            ),
+            Text(announcement.body, style: tt.bodyMedium),
           ],
         ),
       ),

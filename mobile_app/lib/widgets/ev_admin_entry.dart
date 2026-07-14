@@ -40,8 +40,9 @@ class EvAdminEntry extends StatelessWidget {
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         'Add charging bays and take them in / out of service.',
-                        style: tt.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),

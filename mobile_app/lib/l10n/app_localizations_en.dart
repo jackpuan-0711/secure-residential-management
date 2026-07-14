@@ -73,29 +73,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPrivacySecurity => 'Privacy & Security';
 
   @override
-  String get settingsLanguage => 'Language';
-
-  @override
   String get settingsHelpCenter => 'Help Center';
 
   @override
   String get settingsAbout => 'About App';
-
-  @override
-  String get languageTitle => 'Language';
-
-  @override
-  String get languageSubtitle =>
-      'Choose your preferred language. The change applies immediately.';
-
-  @override
-  String get languageEnglish => 'English';
-
-  @override
-  String get languageMalay => 'Bahasa Malaysia';
-
-  @override
-  String get languageUpdated => 'Language updated';
 
   @override
   String get notificationsTitle => 'Notifications';
@@ -132,11 +113,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacySectionAccount => 'Account security';
 
   @override
-  String get privacyChangePassword => 'Change password';
+  String get privacyChangePassword => 'Change 6-digit PIN';
 
   @override
-  String get privacyChangePasswordSubtitle =>
-      'Set a new password for your account';
+  String get privacyChangePasswordSubtitle => 'Update your local app lock PIN';
 
   @override
   String get privacySendResetEmail => 'Send password reset email';
@@ -153,35 +133,36 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your data is stored securely and used only to operate the residence portal. We never sell your personal information.';
 
   @override
-  String get changePasswordTitle => 'Change password';
+  String get changePasswordTitle => 'Change 6-digit PIN';
 
   @override
-  String get currentPasswordLabel => 'Current password';
+  String get currentPasswordLabel => 'Current 6-digit PIN';
 
   @override
-  String get newPasswordLabel => 'New password';
+  String get newPasswordLabel => 'New 6-digit PIN';
 
   @override
-  String get confirmPasswordLabel => 'Confirm new password';
+  String get confirmPasswordLabel => 'Confirm new 6-digit PIN';
 
   @override
-  String get passwordHelperMinLength => 'At least 12 characters';
+  String get passwordHelperMinLength => 'Exactly 6 digits';
 
   @override
-  String get changePasswordButton => 'Update password';
+  String get changePasswordButton => 'Update PIN';
 
   @override
-  String get validationCurrentPasswordRequired => 'Enter your current password';
+  String get validationCurrentPasswordRequired =>
+      'Enter your current 6-digit PIN';
 
   @override
   String get validationConfirmPasswordRequired =>
-      'Please confirm your new password';
+      'Please confirm your new 6-digit PIN';
 
   @override
-  String get validationPasswordsDoNotMatch => 'Passwords do not match';
+  String get validationPasswordsDoNotMatch => 'PINs do not match';
 
   @override
-  String get passwordChangedSuccess => 'Password updated successfully';
+  String get passwordChangedSuccess => '6-digit PIN updated successfully';
 
   @override
   String get resetEmailDialogTitle => 'Send reset email';
@@ -223,13 +204,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get helpFaqApprovalAnswer =>
       'Resident accounts are verified by the management office before unit features are unlocked. This usually takes 1 to 2 business days.';
-
-  @override
-  String get helpFaqLanguageQuestion => 'How do I change the app language?';
-
-  @override
-  String get helpFaqLanguageAnswer =>
-      'Open Settings, then Language, and choose English or Bahasa Malaysia.';
 
   @override
   String get helpContactEmailLabel => 'Email';

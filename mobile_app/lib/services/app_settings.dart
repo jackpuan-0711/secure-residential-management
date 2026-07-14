@@ -1,66 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Device-local UI language preference.
+/// Device-local app preferences.
 ///
-/// ─── WHY THIS IS NOT IN FIRESTORE ──────────────────────────────────
-/// These are presentation/device preferences, not security or domain
-/// state. They must work before sign-in (the login screen is localized)
-/// and offline, so they live in [SharedPreferences], not the user's
-/// Firestore profile. Security-relevant state (role, status, MFA) stays
+/// Presentation preferences live in [SharedPreferences] because they must be
+/// available before sign-in and while offline. Security-relevant state stays
 /// in Firebase Auth / Firestore and is never duplicated here.
-/// ────────────────────────────────────────────────────────────────────
-///
-/// A [ChangeNotifier] so the root [MaterialApp] rebuilds when the locale
-/// changes, applying the new language immediately without a restart.
-/// Read it anywhere via [SettingsScope.of].
 class AppSettings extends ChangeNotifier {
   static const _kLocaleCode = 'settings.localeCode';
-
-  /// Languages the app ships translations for. Keep in lockstep with the
-  /// .arb files in lib/l10n and AppLocalizations.supportedLocales.
-  static const List<Locale> supportedLocales = [Locale('en'), Locale('ms')];
+  static const List<Locale> supportedLocales = [Locale('en')];
 
   final SharedPreferences _prefs;
 
   AppSettings(this._prefs);
 
-  /// Loads persisted preferences. Call once during app startup, before
-  /// `runApp`, so the first frame already reflects the saved language.
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
     return AppSettings(prefs);
   }
 
-  // ── Language ───────────────────────────────────────────────────────
-
-  /// The active locale, defaulting to English when nothing is saved or the
-  /// saved code is no longer supported (e.g. a translation was removed).
-  Locale get locale {
-    final code = _prefs.getString(_kLocaleCode);
-    for (final supported in supportedLocales) {
-      if (supported.languageCode == code) return supported;
-    }
-    return const Locale('en');
-  }
+  Locale get locale => const Locale('en');
 
   Future<void> setLocale(Locale locale) async {
-    if (locale.languageCode == this.locale.languageCode) return;
-    await _prefs.setString(_kLocaleCode, locale.languageCode);
-    notifyListeners();
+    if (locale.languageCode == 'en') {
+      await _prefs.setString(_kLocaleCode, 'en');
+      return;
+    }
+    await _prefs.remove(_kLocaleCode);
   }
-
-  // ── Notification preferences ────────────────────────────────────────
 }
 
 /// Exposes the single [AppSettings] instance to the widget tree.
-///
-/// Usage:
-///   final settings = SettingsScope.of(context);
-///   settings.setLocale(const Locale('ms'));
-///
-/// Backed by [InheritedNotifier], so widgets that call [of] rebuild when
-/// any preference changes.
 class SettingsScope extends InheritedNotifier<AppSettings> {
   const SettingsScope({
     super.key,

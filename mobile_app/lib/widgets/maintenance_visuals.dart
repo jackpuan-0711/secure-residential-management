@@ -51,9 +51,13 @@ class MaintenanceStatusBadge extends StatelessWidget {
       children: [
         Icon(Icons.circle, size: 10, color: color),
         const SizedBox(width: AppSpacing.xs),
-        Text(label,
-            style: tt.labelMedium
-                ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+        Text(
+          label,
+          style: tt.labelMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,10 +15,26 @@ class _FakeAccountBackend extends ManagementBackendService {
 
   final ManagedAdminAccounts accounts;
   final ManagedAdminAccount candidate;
+  final _accountsController =
+      StreamController<ManagedAdminAccounts>.broadcast();
   String? addedEmail;
 
   @override
   Future<ManagedAdminAccounts> listAdminAccounts() async => accounts;
+
+  @override
+  Stream<ManagedAdminAccounts> watchAdminAccounts() async* {
+    yield accounts;
+    yield* _accountsController.stream;
+  }
+
+  void emitAccounts(ManagedAdminAccounts accounts) {
+    _accountsController.add(accounts);
+  }
+
+  void dispose() {
+    _accountsController.close();
+  }
 
   @override
   Future<ManagedAdminAccount> findAdminCandidate({
@@ -35,6 +53,64 @@ class _FakeAccountBackend extends ManagementBackendService {
 }
 
 void main() {
+  testWidgets('administrator list updates when backend stream changes', (
+    tester,
+  ) async {
+    final backend = _FakeAccountBackend(
+      ManagedAdminAccounts(
+        admins: [
+          ManagedAdminAccount(
+            uid: 'alice-uid',
+            email: 'alice@example.com',
+            name: 'Alice',
+            createdAt: DateTime(2026, 2, 1),
+          ),
+        ],
+      ),
+      ManagedAdminAccount(
+        uid: 'bob-uid',
+        email: 'bob@example.com',
+        name: 'Bob',
+        createdAt: DateTime(2026, 2, 1),
+      ),
+    );
+    addTearDown(backend.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: AdminManagementSection(backend: backend)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alice'), findsOneWidget);
+
+    backend.emitAccounts(const ManagedAdminAccounts(admins: []));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alice'), findsNothing);
+    expect(
+      find.text('No current administrators have been added.'),
+      findsOneWidget,
+    );
+
+    backend.emitAccounts(
+      ManagedAdminAccounts(
+        admins: [
+          ManagedAdminAccount(
+            uid: 'bob-uid',
+            email: 'bob@example.com',
+            name: 'Bob',
+            createdAt: DateTime(2026, 2, 1),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bob'), findsOneWidget);
+  });
+
   testWidgets('administrator picker searches verified accounts by email', (
     tester,
   ) async {
@@ -47,6 +123,7 @@ void main() {
         createdAt: DateTime(2026, 2, 1),
       ),
     );
+    addTearDown(backend.dispose);
 
     await tester.pumpWidget(
       MaterialApp(

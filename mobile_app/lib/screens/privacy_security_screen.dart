@@ -7,9 +7,9 @@ import 'change_password_screen.dart';
 
 /// Privacy & Security hub.
 ///
-/// Two ways to update a password (both requested by spec):
-///   1. Change password in-app — reauthenticate + set new (no email).
-///   2. Send a password reset email — out-of-band link.
+/// Security actions:
+///   1. Change the local 6-digit app lock PIN.
+///   2. Send a password reset email - out-of-band link.
 /// Plus a short, plain-language note about how the user's data is handled.
 class PrivacySecurityScreen extends StatelessWidget {
   const PrivacySecurityScreen({super.key});
@@ -49,10 +49,7 @@ class PrivacySecurityScreen extends StatelessWidget {
       );
     } on AuthException catch (e) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: errorColor,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: errorColor),
       );
     }
   }
@@ -73,9 +70,7 @@ class PrivacySecurityScreen extends StatelessWidget {
             subtitle: l10n.privacyChangePasswordSubtitle,
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => const ChangePasswordScreen(),
-              ),
+              MaterialPageRoute(builder: (_) => const ChangePasswordScreen()),
             ),
           ),
           _ActionTile(
@@ -98,8 +93,8 @@ class PrivacySecurityScreen extends StatelessWidget {
                     child: Text(
                       l10n.privacyDataNote,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                          ),
+                        color: AppColors.onSurfaceVariant,
+                      ),
                     ),
                   ),
                 ],
@@ -127,9 +122,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              letterSpacing: 0.8,
-            ),
+          color: AppColors.onSurfaceVariant,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
@@ -155,10 +150,7 @@ class _ActionTile extends StatelessWidget {
       child: ListTile(
         leading: Icon(icon, color: AppColors.primary),
         title: Text(title),
-        subtitle: Text(
-          subtitle,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+        subtitle: Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
         trailing: const Icon(AppIcons.arrowRight, size: 16),
         onTap: onTap,
       ),

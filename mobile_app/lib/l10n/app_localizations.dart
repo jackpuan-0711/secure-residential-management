@@ -6,7 +6,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
-import 'app_localizations_ms.dart';
 
 // ignore_for_file: type=lint
 
@@ -93,10 +92,7 @@ abstract class AppLocalizations {
       ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[
-    Locale('en'),
-    Locale('ms'),
-  ];
+  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
 
   /// No description provided for @appTitle.
   ///
@@ -224,12 +220,6 @@ abstract class AppLocalizations {
   /// **'Privacy & Security'**
   String get settingsPrivacySecurity;
 
-  /// No description provided for @settingsLanguage.
-  ///
-  /// In en, this message translates to:
-  /// **'Language'**
-  String get settingsLanguage;
-
   /// No description provided for @settingsHelpCenter.
   ///
   /// In en, this message translates to:
@@ -241,36 +231,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'About App'**
   String get settingsAbout;
-
-  /// No description provided for @languageTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Language'**
-  String get languageTitle;
-
-  /// No description provided for @languageSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose your preferred language. The change applies immediately.'**
-  String get languageSubtitle;
-
-  /// No description provided for @languageEnglish.
-  ///
-  /// In en, this message translates to:
-  /// **'English'**
-  String get languageEnglish;
-
-  /// No description provided for @languageMalay.
-  ///
-  /// In en, this message translates to:
-  /// **'Bahasa Malaysia'**
-  String get languageMalay;
-
-  /// No description provided for @languageUpdated.
-  ///
-  /// In en, this message translates to:
-  /// **'Language updated'**
-  String get languageUpdated;
 
   /// No description provided for @notificationsTitle.
   ///
@@ -341,13 +301,13 @@ abstract class AppLocalizations {
   /// No description provided for @privacyChangePassword.
   ///
   /// In en, this message translates to:
-  /// **'Change password'**
+  /// **'Change 6-digit PIN'**
   String get privacyChangePassword;
 
   /// No description provided for @privacyChangePasswordSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Set a new password for your account'**
+  /// **'Update your local app lock PIN'**
   String get privacyChangePasswordSubtitle;
 
   /// No description provided for @privacySendResetEmail.
@@ -377,61 +337,61 @@ abstract class AppLocalizations {
   /// No description provided for @changePasswordTitle.
   ///
   /// In en, this message translates to:
-  /// **'Change password'**
+  /// **'Change 6-digit PIN'**
   String get changePasswordTitle;
 
   /// No description provided for @currentPasswordLabel.
   ///
   /// In en, this message translates to:
-  /// **'Current password'**
+  /// **'Current 6-digit PIN'**
   String get currentPasswordLabel;
 
   /// No description provided for @newPasswordLabel.
   ///
   /// In en, this message translates to:
-  /// **'New password'**
+  /// **'New 6-digit PIN'**
   String get newPasswordLabel;
 
   /// No description provided for @confirmPasswordLabel.
   ///
   /// In en, this message translates to:
-  /// **'Confirm new password'**
+  /// **'Confirm new 6-digit PIN'**
   String get confirmPasswordLabel;
 
   /// No description provided for @passwordHelperMinLength.
   ///
   /// In en, this message translates to:
-  /// **'At least 12 characters'**
+  /// **'Exactly 6 digits'**
   String get passwordHelperMinLength;
 
   /// No description provided for @changePasswordButton.
   ///
   /// In en, this message translates to:
-  /// **'Update password'**
+  /// **'Update PIN'**
   String get changePasswordButton;
 
   /// No description provided for @validationCurrentPasswordRequired.
   ///
   /// In en, this message translates to:
-  /// **'Enter your current password'**
+  /// **'Enter your current 6-digit PIN'**
   String get validationCurrentPasswordRequired;
 
   /// No description provided for @validationConfirmPasswordRequired.
   ///
   /// In en, this message translates to:
-  /// **'Please confirm your new password'**
+  /// **'Please confirm your new 6-digit PIN'**
   String get validationConfirmPasswordRequired;
 
   /// No description provided for @validationPasswordsDoNotMatch.
   ///
   /// In en, this message translates to:
-  /// **'Passwords do not match'**
+  /// **'PINs do not match'**
   String get validationPasswordsDoNotMatch;
 
   /// No description provided for @passwordChangedSuccess.
   ///
   /// In en, this message translates to:
-  /// **'Password updated successfully'**
+  /// **'6-digit PIN updated successfully'**
   String get passwordChangedSuccess;
 
   /// No description provided for @resetEmailDialogTitle.
@@ -506,18 +466,6 @@ abstract class AppLocalizations {
   /// **'Resident accounts are verified by the management office before unit features are unlocked. This usually takes 1 to 2 business days.'**
   String get helpFaqApprovalAnswer;
 
-  /// No description provided for @helpFaqLanguageQuestion.
-  ///
-  /// In en, this message translates to:
-  /// **'How do I change the app language?'**
-  String get helpFaqLanguageQuestion;
-
-  /// No description provided for @helpFaqLanguageAnswer.
-  ///
-  /// In en, this message translates to:
-  /// **'Open Settings, then Language, and choose English or Bahasa Malaysia.'**
-  String get helpFaqLanguageAnswer;
-
   /// No description provided for @helpContactEmailLabel.
   ///
   /// In en, this message translates to:
@@ -566,7 +514,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'ms'].contains(locale.languageCode);
+      <String>['en'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -577,8 +525,6 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
-    case 'ms':
-      return AppLocalizationsMs();
   }
 
   throw FlutterError(

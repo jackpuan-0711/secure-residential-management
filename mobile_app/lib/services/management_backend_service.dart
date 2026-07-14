@@ -84,6 +84,14 @@ class ManagementBackendService {
     }
   }
 
+  Stream<ManagedAdminAccounts> watchAdminAccounts() {
+    return _users.watchAdministrators().map(
+      (admins) => ManagedAdminAccounts(
+        admins: admins.map(_toManagedAccount).toList(growable: false),
+      ),
+    );
+  }
+
   Future<ManagedAdminAccount> findAdminCandidate({
     required String email,
   }) async {

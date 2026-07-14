@@ -60,14 +60,16 @@ class PostAnnouncementEntry extends StatelessWidget {
                     children: [
                       Text(
                         'Post an announcement',
-                        style: tt.titleMedium
-                            ?.copyWith(color: cs.onPrimaryContainer),
+                        style: tt.titleMedium?.copyWith(
+                          color: cs.onPrimaryContainer,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         'Share a notice with all verified residents.',
-                        style: tt.bodySmall
-                            ?.copyWith(color: cs.onPrimaryContainer),
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onPrimaryContainer,
+                        ),
                       ),
                     ],
                   ),

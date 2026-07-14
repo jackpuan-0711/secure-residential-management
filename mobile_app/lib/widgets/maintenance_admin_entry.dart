@@ -53,8 +53,9 @@ class MaintenanceAdminEntry extends StatelessWidget {
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         'Review resident requests and update their status.',
-                        style: tt.bodySmall
-                            ?.copyWith(color: cs.onSurfaceVariant),
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),

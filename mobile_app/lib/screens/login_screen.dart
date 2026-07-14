@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../services/auth_service.dart';
+import '../services/session_service.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import 'signup_screen.dart';
@@ -37,9 +38,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Service instance. Created once per screen lifecycle.
   final _authService = AuthService();
+  final _sessionService = SessionService();
 
   // UI state flags.
-  bool _isLoading = false;      // disables button during async call
+  bool _isLoading = false; // disables button during async call
   bool _obscurePassword = true; // password visibility toggle
 
   @override
@@ -63,10 +65,11 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signIn(
+      final identity = await _authService.signIn(
         email: _emailController.text,
         password: _passwordController.text,
       );
+      await _sessionService.startNewSession(identity.uid);
       // On success: authStateChanges stream in main.dart will auto-navigate.
       // We don't push/pop here — single source of truth for routing.
     } on AuthException catch (e) {
@@ -75,6 +78,26 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } on SessionException catch (e) {
+      await _authService.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      await _authService.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start a secure session: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -122,8 +145,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Text(l10n.actionCancel),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(ctx).pop(resetController.text.trim()),
+            onPressed: () => Navigator.of(ctx).pop(resetController.text.trim()),
             child: Text(l10n.resetEmailSendAction),
           ),
         ],
@@ -143,10 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } on AuthException catch (e) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: errorColor,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: errorColor),
       );
     }
   }
@@ -241,9 +260,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: l10n.loginPasswordLabel,
                         prefixIcon: Icon(AppIcons.lockOutlined),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                              ? AppIcons.visibility
-                              : AppIcons.visibilityOff),
+                          icon: Icon(
+                            _obscurePassword
+                                ? AppIcons.visibility
+                                : AppIcons.visibilityOff,
+                          ),
                           onPressed: () => setState(
                             () => _obscurePassword = !_obscurePassword,
                           ),
@@ -256,8 +277,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: TextButton(
-                        onPressed:
-                            _isLoading ? null : _handleForgotPassword,
+                        onPressed: _isLoading ? null : _handleForgotPassword,
                         child: Text(l10n.loginForgotPassword),
                       ),
                     ),
@@ -283,18 +303,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          l10n.loginNoAccountQuestion,
-                          style: tt.bodyMedium,
-                        ),
+                        Text(l10n.loginNoAccountQuestion, style: tt.bodyMedium),
                         TextButton(
                           onPressed: _isLoading
                               ? null
                               : () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const SignupScreen(),
-                                    ),
+                                  MaterialPageRoute(
+                                    builder: (_) => const SignupScreen(),
                                   ),
+                                ),
                           child: Text(l10n.loginSignUpAction),
                         ),
                       ],

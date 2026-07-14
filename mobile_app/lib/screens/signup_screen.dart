@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/session_service.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
@@ -39,6 +40,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
 
   final _authService = AuthService();
+  final _sessionService = SessionService();
 
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -61,11 +63,12 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUp(
+      final identity = await _authService.signUp(
         email: _emailController.text,
         password: _passwordController.text,
         displayName: _nameController.text,
       );
+      await _sessionService.startNewSession(identity.uid);
 
       // Success — pop back to AuthGate.
       //
@@ -101,6 +104,26 @@ class _SignupScreenState extends State<SignupScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } on SessionException catch (e) {
+      await _authService.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      await _authService.signOut();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start a secure session: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -228,9 +251,11 @@ class _SignupScreenState extends State<SignupScreen> {
                         prefixIcon: Icon(AppIcons.lockOutlined),
                         helperText: 'At least 12 characters',
                         suffixIcon: IconButton(
-                          icon: Icon(_obscurePassword
-                              ? AppIcons.visibility
-                              : AppIcons.visibilityOff),
+                          icon: Icon(
+                            _obscurePassword
+                                ? AppIcons.visibility
+                                : AppIcons.visibilityOff,
+                          ),
                           onPressed: () => setState(
                             () => _obscurePassword = !_obscurePassword,
                           ),
@@ -250,9 +275,11 @@ class _SignupScreenState extends State<SignupScreen> {
                         labelText: 'Confirm Password',
                         prefixIcon: Icon(AppIcons.lockOutlined),
                         suffixIcon: IconButton(
-                          icon: Icon(_obscureConfirmPassword
-                              ? AppIcons.visibility
-                              : AppIcons.visibilityOff),
+                          icon: Icon(
+                            _obscureConfirmPassword
+                                ? AppIcons.visibility
+                                : AppIcons.visibilityOff,
+                          ),
                           onPressed: () => setState(
                             () => _obscureConfirmPassword =
                                 !_obscureConfirmPassword,

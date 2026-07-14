@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../l10n/app_localizations.dart';
+import '../services/app_lock_service.dart';
 import '../services/auth_service.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 
-/// In-app password change: verify the current password, then set a new one.
-///
-/// The new-password rule mirrors signup (OWASP ASVS 4.0.3 §2.1.1: minimum
-/// 12 characters, no composition rules per §2.1.9) so the policy is
-/// enforced identically wherever a password is set.
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
 
@@ -23,11 +21,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _confirmController = TextEditingController();
 
   final _authService = AuthService();
+  final _appLockService = const AppLockService();
 
   bool _isLoading = false;
+  bool _hasExistingPin = true;
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadState();
+  }
 
   @override
   void dispose() {
@@ -37,9 +43,19 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     super.dispose();
   }
 
+  Future<void> _loadState() async {
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
+    final hasPin = await _appLockService.hasPin(uid);
+    if (mounted) setState(() => _hasExistingPin = hasPin);
+  }
+
   Future<void> _handleSubmit() async {
     final l10n = AppLocalizations.of(context);
     if (!_formKey.currentState!.validate()) return;
+
+    final uid = _authService.currentUser?.uid;
+    if (uid == null) return;
 
     FocusScope.of(context).unfocus();
     setState(() => _isLoading = true);
@@ -49,20 +65,31 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final errorColor = Theme.of(context).colorScheme.error;
 
     try {
-      await _authService.changePassword(
-        currentPassword: _currentController.text,
-        newPassword: _newController.text,
-      );
+      if (_hasExistingPin) {
+        final verified = await _appLockService.verifyPin(
+          uid,
+          _currentController.text,
+        );
+        if (!verified) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: const Text('Current PIN is incorrect.'),
+              backgroundColor: errorColor,
+            ),
+          );
+          return;
+        }
+      }
+
+      await _appLockService.setPin(uid, _newController.text);
+      AppLockService.unlockRuntime(uid);
       messenger.showSnackBar(
         SnackBar(content: Text(l10n.passwordChangedSuccess)),
       );
       navigator.pop();
-    } on AuthException catch (e) {
+    } on AppLockException catch (e) {
       messenger.showSnackBar(
-        SnackBar(
-          content: Text(e.message),
-          backgroundColor: errorColor,
-        ),
+        SnackBar(content: Text(e.message), backgroundColor: errorColor),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -70,35 +97,36 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   String? _validateCurrent(String? value) {
-    final l10n = AppLocalizations.of(context);
-    if (value == null || value.isEmpty) {
-      return l10n.validationCurrentPasswordRequired;
-    }
-    return null;
+    if (!_hasExistingPin) return null;
+    return _validatePin(value, emptyMessage: 'Enter your current 6-digit PIN');
   }
 
   String? _validateNew(String? value) {
-    final l10n = AppLocalizations.of(context);
-    if (value == null || value.isEmpty) {
-      return l10n.validationPasswordRequired;
-    }
-    // OWASP ASVS 4.0.3 §2.1.1 (L1): minimum 12 characters. Matches signup.
-    if (value.length < 12) {
-      return l10n.validationPasswordMinLength;
+    return _validatePin(value, emptyMessage: 'Enter a new 6-digit PIN');
+  }
+
+  String? _validateConfirm(String? value) {
+    final pinError = _validatePin(
+      value,
+      emptyMessage: 'Please confirm your new 6-digit PIN',
+    );
+    if (pinError != null) return pinError;
+    if (value != _newController.text) return 'PINs do not match';
+    return null;
+  }
+
+  String? _validatePin(String? value, {required String emptyMessage}) {
+    if (value == null || value.isEmpty) return emptyMessage;
+    if (!RegExp(r'^\d{6}$').hasMatch(value)) {
+      return 'PIN must be exactly 6 digits';
     }
     return null;
   }
 
-  String? _validateConfirm(String? value) {
-    final l10n = AppLocalizations.of(context);
-    if (value == null || value.isEmpty) {
-      return l10n.validationConfirmPasswordRequired;
-    }
-    if (value != _newController.text) {
-      return l10n.validationPasswordsDoNotMatch;
-    }
-    return null;
-  }
+  List<TextInputFormatter> get _pinFormatters => [
+    FilteringTextInputFormatter.digitsOnly,
+    LengthLimitingTextInputFormatter(AppLockService.pinLength),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -116,37 +144,51 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextFormField(
-                    controller: _currentController,
-                    obscureText: _obscureCurrent,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: l10n.currentPasswordLabel,
-                      prefixIcon: const Icon(AppIcons.lockOutlined),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscureCurrent
-                            ? AppIcons.visibility
-                            : AppIcons.visibilityOff),
-                        onPressed: () => setState(
-                          () => _obscureCurrent = !_obscureCurrent,
+                  if (_hasExistingPin) ...[
+                    TextFormField(
+                      controller: _currentController,
+                      obscureText: _obscureCurrent,
+                      keyboardType: TextInputType.number,
+                      maxLength: AppLockService.pinLength,
+                      inputFormatters: _pinFormatters,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l10n.currentPasswordLabel,
+                        counterText: '',
+                        prefixIcon: const Icon(AppIcons.lockOutlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscureCurrent
+                                ? AppIcons.visibility
+                                : AppIcons.visibilityOff,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscureCurrent = !_obscureCurrent,
+                          ),
                         ),
                       ),
+                      validator: _validateCurrent,
                     ),
-                    validator: _validateCurrent,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                   TextFormField(
                     controller: _newController,
                     obscureText: _obscureNew,
+                    keyboardType: TextInputType.number,
+                    maxLength: AppLockService.pinLength,
+                    inputFormatters: _pinFormatters,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       labelText: l10n.newPasswordLabel,
                       helperText: l10n.passwordHelperMinLength,
+                      counterText: '',
                       prefixIcon: const Icon(AppIcons.lockOutlined),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscureNew
-                            ? AppIcons.visibility
-                            : AppIcons.visibilityOff),
+                        icon: Icon(
+                          _obscureNew
+                              ? AppIcons.visibility
+                              : AppIcons.visibilityOff,
+                        ),
                         onPressed: () =>
                             setState(() => _obscureNew = !_obscureNew),
                       ),
@@ -157,18 +199,23 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   TextFormField(
                     controller: _confirmController,
                     obscureText: _obscureConfirm,
+                    keyboardType: TextInputType.number,
+                    maxLength: AppLockService.pinLength,
+                    inputFormatters: _pinFormatters,
                     textInputAction: TextInputAction.done,
                     onFieldSubmitted: (_) => _handleSubmit(),
                     decoration: InputDecoration(
                       labelText: l10n.confirmPasswordLabel,
+                      counterText: '',
                       prefixIcon: const Icon(AppIcons.lockOutlined),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscureConfirm
-                            ? AppIcons.visibility
-                            : AppIcons.visibilityOff),
-                        onPressed: () => setState(
-                          () => _obscureConfirm = !_obscureConfirm,
+                        icon: Icon(
+                          _obscureConfirm
+                              ? AppIcons.visibility
+                              : AppIcons.visibilityOff,
                         ),
+                        onPressed: () =>
+                            setState(() => _obscureConfirm = !_obscureConfirm),
                       ),
                     ),
                     validator: _validateConfirm,

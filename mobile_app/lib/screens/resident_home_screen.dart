@@ -89,21 +89,21 @@ class _ResidentHomeTab extends StatelessWidget {
 
   void _open(BuildContext context, String title) {
     if (title == 'Announcements') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AnnouncementsScreen()),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const AnnouncementsScreen()));
     } else if (title == 'Maintenance') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => MaintenanceScreen(user: user)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => MaintenanceScreen(user: user)));
     } else if (title == 'Visitor Passes') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => VisitorScreen(user: user)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => VisitorScreen(user: user)));
     } else if (title == 'EV Charging') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => EvChargingScreen(user: user)),
-      );
+      Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => EvChargingScreen(user: user)));
     }
   }
 
@@ -178,11 +178,7 @@ class _Feature {
   final String label;
   final String body;
 
-  const _Feature({
-    required this.icon,
-    required this.label,
-    required this.body,
-  });
+  const _Feature({required this.icon, required this.label, required this.body});
 }
 
 class _FeatureCard extends StatelessWidget {

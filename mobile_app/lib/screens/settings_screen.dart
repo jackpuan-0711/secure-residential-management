@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/app_settings.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import 'about_screen.dart';
@@ -15,54 +14,6 @@ class SettingsScreen extends StatelessWidget {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
   }
 
-  Future<void> _chooseLanguage(BuildContext context) async {
-    final l10n = AppLocalizations.of(context);
-    final settings = SettingsScope.of(context);
-    final selected = await showModalBottomSheet<Locale>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            0,
-            AppSpacing.lg,
-            AppSpacing.lg,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l10n.languageTitle,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(l10n.languageSubtitle),
-              const SizedBox(height: AppSpacing.md),
-              _LanguageOption(
-                label: l10n.languageEnglish,
-                selected: settings.locale.languageCode == 'en',
-                onTap: () => Navigator.of(sheetContext).pop(const Locale('en')),
-              ),
-              _LanguageOption(
-                label: l10n.languageMalay,
-                selected: settings.locale.languageCode == 'ms',
-                onTap: () => Navigator.of(sheetContext).pop(const Locale('ms')),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (selected == null || !context.mounted) return;
-    await settings.setLocale(selected);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppLocalizations.of(context).languageUpdated)),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -73,11 +24,6 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           _SectionHeader(title: l10n.settingsSectionGeneral),
-          _SettingTile(
-            icon: Icons.language_rounded,
-            title: l10n.settingsLanguage,
-            onTap: () => _chooseLanguage(context),
-          ),
           _SettingTile(
             icon: AppIcons.lockOutlined,
             title: l10n.settingsPrivacySecurity,
@@ -97,29 +43,6 @@ class SettingsScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _LanguageOption extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _LanguageOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      shape: RoundedRectangleBorder(borderRadius: AppRadius.mdBr),
-      leading: Icon(selected ? Icons.check_circle : Icons.circle_outlined),
-      title: Text(label),
-      selected: selected,
-      onTap: onTap,
     );
   }
 }

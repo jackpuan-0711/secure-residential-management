@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -16,6 +18,7 @@ class AdminManagementSection extends StatefulWidget {
 
 class _AdminManagementSectionState extends State<AdminManagementSection> {
   late final ManagementBackendService _backend;
+  StreamSubscription<ManagedAdminAccounts>? _accountsSubscription;
   ManagedAdminAccounts? _accounts;
   Object? _loadError;
   bool _loading = true;
@@ -29,24 +32,38 @@ class _AdminManagementSectionState extends State<AdminManagementSection> {
     _loadAccounts();
   }
 
-  Future<void> _loadAccounts() async {
+  @override
+  void dispose() {
+    _accountsSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _loadAccounts() {
+    _accountsSubscription?.cancel();
     if (mounted) {
       setState(() {
         _loading = true;
         _loadError = null;
       });
     }
-    try {
-      final accounts = await _backend.listAdminAccounts();
-      if (mounted) {
-        setState(() => _accounts = accounts);
-      }
-    } catch (error) {
-      // Surface permission or malformed-data errors with a retry action.
-      if (mounted) setState(() => _loadError = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+    _accountsSubscription = _backend.watchAdminAccounts().listen(
+      (accounts) {
+        if (!mounted) return;
+        setState(() {
+          _accounts = accounts;
+          _loadError = null;
+          _loading = false;
+        });
+      },
+      onError: (Object error) {
+        // Surface permission or malformed-data errors with a retry action.
+        if (!mounted) return;
+        setState(() {
+          _loadError = error;
+          _loading = false;
+        });
+      },
+    );
   }
 
   Future<void> _showAddAdminDialog() async {
@@ -62,7 +79,6 @@ class _AdminManagementSectionState extends State<AdminManagementSection> {
       await _backend.addAdmin(email: selected.email);
       if (!mounted) return;
       _toast('${selected.name} is now an administrator.');
-      await _loadAccounts();
     } catch (error) {
       if (mounted) _toast('Could not add administrator: $error', isError: true);
     } finally {
@@ -101,7 +117,6 @@ class _AdminManagementSectionState extends State<AdminManagementSection> {
       await _backend.removeAdmin(targetUid: admin.uid);
       if (!mounted) return;
       _toast('Removed ${admin.name} from administrators.');
-      await _loadAccounts();
     } catch (error) {
       if (mounted) {
         _toast('Could not remove administrator: $error', isError: true);
@@ -283,9 +298,7 @@ class _AdminAccountPickerDialogState extends State<_AdminAccountPickerDialog> {
                 onTap: () => Navigator.of(context).pop(account),
               )
             else
-              const Text(
-                'Search for an existing active public account.',
-              ),
+              const Text('Search for an existing active public account.'),
           ],
         ),
       ),

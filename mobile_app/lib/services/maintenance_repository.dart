@@ -18,7 +18,7 @@ class MaintenanceRepository {
   final FirebaseFirestore _firestore;
 
   MaintenanceRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _collection = 'maintenance_requests';
 
@@ -67,9 +67,11 @@ class MaintenanceRepository {
         .where('residentId', isEqualTo: residentId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => MaintenanceRequest.fromFirestore(d, null))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => MaintenanceRequest.fromFirestore(d, null))
+              .toList(),
+        );
   }
 
   /// Live list of ALL requests for the admin queue, newest first. Single-field
@@ -79,9 +81,11 @@ class MaintenanceRepository {
     return _ref
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => MaintenanceRequest.fromFirestore(d, null))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => MaintenanceRequest.fromFirestore(d, null))
+              .toList(),
+        );
   }
 
   // ═══════════════════════════════════════════════════════════════

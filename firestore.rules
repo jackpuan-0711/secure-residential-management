@@ -216,6 +216,39 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // /auth_sessions/{uid} - current-login marker for one active app session.
+    //
+    // SECURITY (CWE-613): the app writes a fresh random activeSessionId on
+    // sign-in. Other devices watching this document immediately sign out when
+    // the marker changes or expires. Access is owner-only; no account can read
+    // or replace another account's session marker.
+    match /auth_sessions/{uid} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+      function incoming() { return request.resource.data; }
+      function validPayload() {
+        return incoming().keys().hasOnly(
+            ['activeSessionId', 'issuedAt', 'lastSeenAt', 'expiresAt'])
+          && incoming().activeSessionId is string
+          && incoming().activeSessionId.size() >= 24
+          && incoming().activeSessionId.size() <= 256
+          && incoming().lastSeenAt == request.time
+          && incoming().expiresAt is timestamp
+          && incoming().expiresAt > request.time;
+      }
+
+      allow read: if isOwner();
+      allow create: if isOwner()
+        && validPayload()
+        && incoming().issuedAt == request.time;
+      allow update: if isOwner()
+        && validPayload()
+        && (incoming().issuedAt == request.time
+            || incoming().issuedAt == resource.data.issuedAt);
+      allow delete: if false;
+    }
+
     // ═════════════════════════════════════════════════════════════════
     // /announcements/{id} — building-wide notices authored by staff.
     //

@@ -64,8 +64,10 @@ class _SubmitMaintenanceScreenState extends State<SubmitMaintenanceScreen> {
     if (form == null || !form.validate()) return;
 
     if (widget.residentId.isEmpty || widget.unitNumber.isEmpty) {
-      _toast('Your unit is not verified yet — cannot file a request.',
-          isError: true);
+      _toast(
+        'Your unit is not verified yet — cannot file a request.',
+        isError: true,
+      );
       return;
     }
 
@@ -121,20 +123,25 @@ class _SubmitMaintenanceScreenState extends State<SubmitMaintenanceScreen> {
                     for (final c in MaintenanceCategory.values)
                       DropdownMenuItem(
                         value: c,
-                        child: Builder(builder: (_) {
-                          final (label, icon) = maintenanceCategoryVisual(c);
-                          return Row(
-                            children: [
-                              Icon(icon, size: 18, color: cs.onSurfaceVariant),
-                              const SizedBox(width: AppSpacing.sm),
-                              Text(label),
-                            ],
-                          );
-                        }),
+                        child: Builder(
+                          builder: (_) {
+                            final (label, icon) = maintenanceCategoryVisual(c);
+                            return Row(
+                              children: [
+                                Icon(
+                                  icon,
+                                  size: 18,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: AppSpacing.sm),
+                                Text(label),
+                              ],
+                            );
+                          },
+                        ),
                       ),
                   ],
-                  onChanged: (v) =>
-                      setState(() => _category = v ?? _category),
+                  onChanged: (v) => setState(() => _category = v ?? _category),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
@@ -161,7 +168,8 @@ class _SubmitMaintenanceScreenState extends State<SubmitMaintenanceScreen> {
                   textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
                     labelText: 'Description',
-                    hintText: 'Describe the issue, where it is, and when it '
+                    hintText:
+                        'Describe the issue, where it is, and when it '
                         'started.',
                     alignLabelWithHint: true,
                   ),

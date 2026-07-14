@@ -113,7 +113,8 @@ class MaintenanceRequest {
     final data = snapshot.data();
     if (data == null) {
       throw StateError(
-          'MaintenanceRequest document "${snapshot.id}" has no data');
+        'MaintenanceRequest document "${snapshot.id}" has no data',
+      );
     }
 
     return MaintenanceRequest(

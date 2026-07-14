@@ -11,17 +11,17 @@ void main() {
       expect(settings.locale.languageCode, 'en');
     });
 
-    test('setLocale persists the choice and notifies listeners', () async {
+    test('setLocale keeps English as the only supported language', () async {
       SharedPreferences.setMockInitialValues({});
       final settings = await AppSettings.load();
       var notified = 0;
       settings.addListener(() => notified++);
 
-      await settings.setLocale(const Locale('ms'));
+      await settings.setLocale(const Locale('fr'));
 
-      expect(settings.locale.languageCode, 'ms');
-      expect(notified, 1);
-      expect((await AppSettings.load()).locale.languageCode, 'ms');
+      expect(settings.locale.languageCode, 'en');
+      expect(notified, 0);
+      expect((await AppSettings.load()).locale.languageCode, 'en');
     });
 
     test('setting the same locale does not notify', () async {

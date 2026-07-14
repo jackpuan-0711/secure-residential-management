@@ -19,6 +19,7 @@ import 'screens/staff_home_screen.dart';
 import 'screens/public_home_screen.dart';
 import 'screens/resident_home_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/authenticated_security_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,7 +85,10 @@ class AuthGate extends StatelessWidget {
         }
 
         if (!identity.emailVerified) {
-          return const EmailVerificationScreen();
+          return AuthenticatedSecurityGate(
+            uid: identity.uid,
+            child: const EmailVerificationScreen(),
+          );
         }
 
         // ─── OUT-OF-BAND CLAIM ROLES ────────────────────────────────────
@@ -92,58 +96,67 @@ class AuthGate extends StatelessWidget {
         // with signed custom claims. Administrators are resolved below from a
         // Firestore profile role that only the superadmin can change.
         if (identity.role == UserRole.superadmin) {
-          return SuperadminHomeScreen(identity: identity);
+          return AuthenticatedSecurityGate(
+            uid: identity.uid,
+            child: SuperadminHomeScreen(identity: identity),
+          );
         }
         if (identity.role == UserRole.staff) {
-          return StaffHomeScreen(identity: identity);
+          return AuthenticatedSecurityGate(
+            uid: identity.uid,
+            child: StaffHomeScreen(identity: identity),
+          );
         }
 
         // ─── PROFILE-DRIVEN ROLES AND LIFECYCLE ─────────────────────────
         // All remaining role and lifecycle routing comes from the protected
         // Firestore profile. Rules prevent owners from changing role/status.
-        return StreamBuilder<AppUser?>(
-          stream: userRepository.watchUserProfile(identity.uid),
-          builder: (context, profileSnapshot) {
-            if (profileSnapshot.connectionState == ConnectionState.waiting) {
-              return const _SplashScreen();
-            }
+        return AuthenticatedSecurityGate(
+          uid: identity.uid,
+          child: StreamBuilder<AppUser?>(
+            stream: userRepository.watchUserProfile(identity.uid),
+            builder: (context, profileSnapshot) {
+              if (profileSnapshot.connectionState == ConnectionState.waiting) {
+                return const _SplashScreen();
+              }
 
-            final profile = profileSnapshot.data;
+              final profile = profileSnapshot.data;
 
-            if (profile == null) {
-              return const CompleteProfileScreen();
-            }
+              if (profile == null) {
+                return const CompleteProfileScreen();
+              }
 
-            if (profile.status == UserStatus.suspended) {
-              return const _SuspendedPlaceholder();
-            }
+              if (profile.status == UserStatus.suspended) {
+                return const _SuspendedPlaceholder();
+              }
 
-            // Any other pending applicant — a resident signup OR a public
-            // user who applied to upgrade — waits on the admin queue.
-            if (profile.status == UserStatus.pendingApproval) {
-              return const AwaitingApprovalScreen();
-            }
+              // Any other pending applicant — a resident signup OR a public
+              // user who applied to upgrade — waits on the admin queue.
+              if (profile.status == UserStatus.pendingApproval) {
+                return const AwaitingApprovalScreen();
+              }
 
-            // Only the claim-authenticated superadmin can assign this protected
-            // profile role. Firestore rules prevent self-promotion.
-            if (profile.role == UserRole.admin &&
-                profile.status == UserStatus.active) {
-              return AdminHomeScreen(identity: identity);
-            }
+              // Only the claim-authenticated superadmin can assign this protected
+              // profile role. Firestore rules prevent self-promotion.
+              if (profile.role == UserRole.admin &&
+                  profile.status == UserStatus.active) {
+                return AdminHomeScreen(identity: identity);
+              }
 
-            if (profile.role == UserRole.superadmin) {
-              return const _PrivilegedClaimRefreshScreen();
-            }
+              if (profile.role == UserRole.superadmin) {
+                return const _PrivilegedClaimRefreshScreen();
+              }
 
-            // Active, verified resident.
-            if (profile.role == UserRole.resident) {
-              return ResidentHomeScreen(user: profile);
-            }
+              // Active, verified resident.
+              if (profile.role == UserRole.resident) {
+                return ResidentHomeScreen(user: profile);
+              }
 
-            // Everyone else active (public, and any non-routed tier)
-            // lands on the public home.
-            return PublicHomeScreen(user: profile);
-          },
+              // Everyone else active (public, and any non-routed tier)
+              // lands on the public home.
+              return PublicHomeScreen(user: profile);
+            },
+          ),
         );
       },
     );

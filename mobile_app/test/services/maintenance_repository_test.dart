@@ -47,30 +47,35 @@ void main() {
   // ═══════════════════════════════════════════════════════════════
 
   group('createRequest', () {
-    test('writes a pending request with server timestamps + null audit',
-        () async {
-      await repository.createRequest(
-        residentId: 'resident-1',
-        unitNumber: 'A-12-5',
-        category: MaintenanceCategory.electrical,
-        title: 'No power in bedroom',
-        description: 'The bedroom sockets are dead.',
-      );
+    test(
+      'writes a pending request with server timestamps + null audit',
+      () async {
+        await repository.createRequest(
+          residentId: 'resident-1',
+          unitNumber: 'A-12-5',
+          category: MaintenanceCategory.electrical,
+          title: 'No power in bedroom',
+          description: 'The bedroom sockets are dead.',
+        );
 
-      final snap = await firestore.collection('maintenance_requests').get();
-      expect(snap.docs.length, 1);
-      final data = snap.docs.first.data();
-      expect(data['residentId'], 'resident-1');
-      expect(data['unitNumber'], 'A-12-5');
-      expect(data['category'], 'electrical');
-      expect(data['title'], 'No power in bedroom');
-      expect(data['status'], 'pending');
-      expect(data['handledBy'], isNull);
-      expect(data['resolvedAt'], isNull);
-      expect(data['createdAt'], isA<Timestamp>(),
-          reason: 'createdAt must be a server timestamp');
-      expect(data['updatedAt'], isA<Timestamp>());
-    });
+        final snap = await firestore.collection('maintenance_requests').get();
+        expect(snap.docs.length, 1);
+        final data = snap.docs.first.data();
+        expect(data['residentId'], 'resident-1');
+        expect(data['unitNumber'], 'A-12-5');
+        expect(data['category'], 'electrical');
+        expect(data['title'], 'No power in bedroom');
+        expect(data['status'], 'pending');
+        expect(data['handledBy'], isNull);
+        expect(data['resolvedAt'], isNull);
+        expect(
+          data['createdAt'],
+          isA<Timestamp>(),
+          reason: 'createdAt must be a server timestamp',
+        );
+        expect(data['updatedAt'], isA<Timestamp>());
+      },
+    );
   });
 
   // ═══════════════════════════════════════════════════════════════
@@ -83,8 +88,9 @@ void main() {
       await createOne(residentId: 'resident-2', title: 'Theirs');
 
       final emissions = <List<MaintenanceRequest>>[];
-      final sub =
-          repository.watchMyRequests('resident-1').listen(emissions.add);
+      final sub = repository
+          .watchMyRequests('resident-1')
+          .listen(emissions.add);
       await settle();
       await sub.cancel();
 
@@ -119,8 +125,10 @@ void main() {
         handledByUid: 'admin-1',
       );
 
-      final data =
-          await firestore.collection('maintenance_requests').doc(id).get();
+      final data = await firestore
+          .collection('maintenance_requests')
+          .doc(id)
+          .get();
       expect(data.data()!['status'], 'resolved');
       expect(data.data()!['handledBy'], 'admin-1');
       expect(data.data()!['resolvedAt'], isA<Timestamp>());
@@ -140,11 +148,16 @@ void main() {
         handledByUid: 'admin-1',
       );
 
-      final data =
-          await firestore.collection('maintenance_requests').doc(id).get();
+      final data = await firestore
+          .collection('maintenance_requests')
+          .doc(id)
+          .get();
       expect(data.data()!['status'], 'inProgress');
-      expect(data.data()!['resolvedAt'], isNull,
-          reason: 'a reopened request must lose its stale resolution time');
+      expect(
+        data.data()!['resolvedAt'],
+        isNull,
+        reason: 'a reopened request must lose its stale resolution time',
+      );
     });
   });
 
@@ -153,27 +166,31 @@ void main() {
   // ═══════════════════════════════════════════════════════════════
 
   group('MaintenanceRequest.fromFirestore', () {
-    test('degrades unknown category → other and unknown status → pending',
-        () async {
-      await firestore.collection('maintenance_requests').doc('bad-1').set({
-        'residentId': 'resident-1',
-        'unitNumber': 'A-12-5',
-        'category': 'teleportation', // unknown
-        'title': 'Mystery',
-        'description': 'Unknown category and status.',
-        'status': 'levitating', // unknown
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        'handledBy': null,
-        'resolvedAt': null,
-      });
+    test(
+      'degrades unknown category → other and unknown status → pending',
+      () async {
+        await firestore.collection('maintenance_requests').doc('bad-1').set({
+          'residentId': 'resident-1',
+          'unitNumber': 'A-12-5',
+          'category': 'teleportation', // unknown
+          'title': 'Mystery',
+          'description': 'Unknown category and status.',
+          'status': 'levitating', // unknown
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'handledBy': null,
+          'resolvedAt': null,
+        });
 
-      final doc =
-          await firestore.collection('maintenance_requests').doc('bad-1').get();
-      final req = MaintenanceRequest.fromFirestore(doc, null);
-      expect(req.category, MaintenanceCategory.other);
-      expect(req.status, MaintenanceStatus.pending);
-    });
+        final doc = await firestore
+            .collection('maintenance_requests')
+            .doc('bad-1')
+            .get();
+        final req = MaintenanceRequest.fromFirestore(doc, null);
+        expect(req.category, MaintenanceCategory.other);
+        expect(req.status, MaintenanceStatus.pending);
+      },
+    );
 
     test('throws on a corrupt identity field (missing title)', () async {
       await firestore.collection('maintenance_requests').doc('corrupt').set({
@@ -190,8 +207,10 @@ void main() {
           .collection('maintenance_requests')
           .doc('corrupt')
           .get();
-      expect(() => MaintenanceRequest.fromFirestore(doc, null),
-          throwsA(isA<TypeError>()));
+      expect(
+        () => MaintenanceRequest.fromFirestore(doc, null),
+        throwsA(isA<TypeError>()),
+      );
     });
 
     test('every category and status round-trips', () {

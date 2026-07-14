@@ -17,6 +17,7 @@ const {
   getDoc,
   updateDoc,
   serverTimestamp,
+  Timestamp,
 } = require('firebase/firestore');
 
 const PROJECT_ID = 'residential-management-a3fbf';
@@ -83,6 +84,15 @@ function publicProfile(uid, overrides = {}) {
     mfaEnrolled: false,
     fcmTokens: [],
     ...overrides,
+  };
+}
+
+function sessionPayload(sessionId = 'session-token-12345678901234567890') {
+  return {
+    activeSessionId: sessionId,
+    issuedAt: serverTimestamp(),
+    lastSeenAt: serverTimestamp(),
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 15 * 60 * 1000)),
   };
 }
 
@@ -180,6 +190,39 @@ describe('read', () => {
   test('admin reads profile -> ALLOW', async () => {
     const db = adminCtx().firestore();
     await assertSucceeds(getDoc(doc(db, 'users', 'resident-1')));
+  });
+});
+
+describe('auth session marker', () => {
+  test('owner can create, read, refresh, and replace own session -> ALLOW', async () => {
+    const db = userCtx('resident-1').firestore();
+    const ref = doc(db, 'auth_sessions', 'resident-1');
+
+    await assertSucceeds(setDoc(ref, sessionPayload()));
+    await assertSucceeds(getDoc(ref));
+    await assertSucceeds(
+      updateDoc(ref, {
+        lastSeenAt: serverTimestamp(),
+        expiresAt: Timestamp.fromDate(new Date(Date.now() + 15 * 60 * 1000)),
+      }),
+    );
+    await assertSucceeds(setDoc(ref, sessionPayload('replacement-session-123456789012345')));
+  });
+
+  test('other users cannot read or replace a session marker -> DENY', async () => {
+    await seedUser('resident-1', residentProfile('resident-1'));
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(
+        doc(ctx.firestore(), 'auth_sessions', 'resident-1'),
+        sessionPayload(),
+      );
+    });
+
+    const db = userCtx('resident-2').firestore();
+    await assertFails(getDoc(doc(db, 'auth_sessions', 'resident-1')));
+    await assertFails(
+      setDoc(doc(db, 'auth_sessions', 'resident-1'), sessionPayload()),
+    );
   });
 });
 

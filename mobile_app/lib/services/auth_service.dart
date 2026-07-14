@@ -2,6 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/auth_identity.dart';
 import '../models/user_role.dart';
+import 'app_lock_service.dart';
+import 'biometric_auth_service.dart';
+import 'session_service.dart';
 
 /// Central authentication service for the Residential Management app.
 ///
@@ -198,6 +201,15 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final uid = _firebaseAuth.currentUser?.uid;
+    if (uid != null) {
+      try {
+        await SessionService().clearLocalSession(uid);
+      } catch (_) {
+        AppLockService.lockRuntime(uid);
+      }
+    }
+    BiometricAuthService.clearRuntime();
     await _firebaseAuth.signOut();
   }
 

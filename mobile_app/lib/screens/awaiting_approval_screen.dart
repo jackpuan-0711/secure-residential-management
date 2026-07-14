@@ -37,8 +37,7 @@ class AwaitingApprovalScreen extends StatefulWidget {
   });
 
   @override
-  State<AwaitingApprovalScreen> createState() =>
-      _AwaitingApprovalScreenState();
+  State<AwaitingApprovalScreen> createState() => _AwaitingApprovalScreenState();
 }
 
 class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
@@ -81,9 +80,9 @@ class _AwaitingApprovalScreenState extends State<AwaitingApprovalScreen> {
   void _continueAsPublic() {
     final profile = _profile;
     if (profile == null) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => PublicHomeScreen(user: profile)),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => PublicHomeScreen(user: profile)));
   }
 
   @override

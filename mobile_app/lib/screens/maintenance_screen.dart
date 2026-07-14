@@ -64,7 +64,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
             ? _Centered(
                 icon: AppIcons.pending,
                 title: 'Unit not verified',
-                body: 'Maintenance requests are tied to a verified unit. Once '
+                body:
+                    'Maintenance requests are tied to a verified unit. Once '
                     'your residency is approved you can file requests here.',
               )
             : StreamBuilder<List<MaintenanceRequest>>(
@@ -87,7 +88,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     return _Centered(
                       icon: AppIcons.maintenanceOutlined,
                       title: 'No requests yet',
-                      body: 'Tap “New request” to report an issue in your '
+                      body:
+                          'Tap “New request” to report an issue in your '
                           'unit. You can track its status here.',
                     );
                   }
@@ -122,8 +124,9 @@ class _RequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final (categoryLabel, categoryIcon) =
-        maintenanceCategoryVisual(request.category);
+    final (categoryLabel, categoryIcon) = maintenanceCategoryVisual(
+      request.category,
+    );
 
     return Card(
       child: Padding(
@@ -189,9 +192,11 @@ class _Centered extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 56,
-                color: isError ? cs.error : cs.onSurfaceVariant),
+            Icon(
+              icon,
+              size: 56,
+              color: isError ? cs.error : cs.onSurfaceVariant,
+            ),
             const SizedBox(height: AppSpacing.md),
             Text(title, style: tt.titleMedium),
             const SizedBox(height: AppSpacing.xs),
@@ -199,7 +204,8 @@ class _Centered extends StatelessWidget {
               body,
               textAlign: TextAlign.center,
               style: tt.bodyMedium?.copyWith(
-                  color: isError ? cs.error : cs.onSurfaceVariant),
+                color: isError ? cs.error : cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),

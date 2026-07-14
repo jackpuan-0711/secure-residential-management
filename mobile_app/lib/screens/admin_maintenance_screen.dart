@@ -45,7 +45,9 @@ class _AdminMaintenanceScreenState extends State<AdminMaintenanceScreen> {
   }
 
   Future<void> _setStatus(
-      MaintenanceRequest request, MaintenanceStatus status) async {
+    MaintenanceRequest request,
+    MaintenanceStatus status,
+  ) async {
     if (status == request.status) return;
     try {
       await _repo.updateStatus(
@@ -83,9 +85,11 @@ class _AdminMaintenanceScreenState extends State<AdminMaintenanceScreen> {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpacing.xl),
-                  child: Text('Could not load the queue.\n${snapshot.error}',
-                      textAlign: TextAlign.center,
-                      style: tt.bodyMedium?.copyWith(color: cs.error)),
+                  child: Text(
+                    'Could not load the queue.\n${snapshot.error}',
+                    textAlign: TextAlign.center,
+                    style: tt.bodyMedium?.copyWith(color: cs.error),
+                  ),
                 ),
               );
             }
@@ -97,15 +101,21 @@ class _AdminMaintenanceScreenState extends State<AdminMaintenanceScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(AppIcons.checkCircle,
-                          size: 56, color: cs.onSurfaceVariant),
+                      Icon(
+                        AppIcons.checkCircle,
+                        size: 56,
+                        color: cs.onSurfaceVariant,
+                      ),
                       const SizedBox(height: AppSpacing.md),
                       Text('Nothing in the queue', style: tt.titleMedium),
                       const SizedBox(height: AppSpacing.xs),
-                      Text('Resident maintenance requests will appear here.',
-                          textAlign: TextAlign.center,
-                          style: tt.bodyMedium
-                              ?.copyWith(color: cs.onSurfaceVariant)),
+                      Text(
+                        'Resident maintenance requests will appear here.',
+                        textAlign: TextAlign.center,
+                        style: tt.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -119,7 +129,9 @@ class _AdminMaintenanceScreenState extends State<AdminMaintenanceScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.only(
-                      left: AppSpacing.xs, bottom: AppSpacing.sm),
+                    left: AppSpacing.xs,
+                    bottom: AppSpacing.sm,
+                  ),
                   child: Text(
                     '${requests.length} total · $pending pending',
                     style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
@@ -155,8 +167,9 @@ class _AdminRequestCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
-    final (categoryLabel, categoryIcon) =
-        maintenanceCategoryVisual(request.category);
+    final (categoryLabel, categoryIcon) = maintenanceCategoryVisual(
+      request.category,
+    );
 
     return Card(
       child: Padding(
@@ -177,12 +190,16 @@ class _AdminRequestCard extends StatelessWidget {
               children: [
                 Icon(AppIcons.unit, size: 14, color: cs.onSurfaceVariant),
                 const SizedBox(width: AppSpacing.xs),
-                Text('Unit ${request.unitNumber}',
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text(
+                  'Unit ${request.unitNumber}',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
                 const SizedBox(width: AppSpacing.sm),
-                Text('· $categoryLabel · '
-                    '${DateFormat.yMMMd().format(request.createdAt)}',
-                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                Text(
+                  '· $categoryLabel · '
+                  '${DateFormat.yMMMd().format(request.createdAt)}',
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.sm),

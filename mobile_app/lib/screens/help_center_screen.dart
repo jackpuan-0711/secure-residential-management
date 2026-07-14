@@ -39,25 +39,22 @@ class HelpCenterScreen extends StatelessWidget {
             question: l10n.helpFaqApprovalQuestion,
             answer: l10n.helpFaqApprovalAnswer,
           ),
-          _FaqItem(
-            question: l10n.helpFaqLanguageQuestion,
-            answer: l10n.helpFaqLanguageAnswer,
-          ),
           const SizedBox(height: AppSpacing.md),
           _SectionHeader(title: l10n.helpSectionContact),
           Card(
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(AppIcons.emailOutlined,
-                      color: AppColors.primary),
+                  leading: const Icon(
+                    AppIcons.emailOutlined,
+                    color: AppColors.primary,
+                  ),
                   title: Text(l10n.helpContactEmailLabel),
                   subtitle: const Text('support@residentialhub.my'),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading:
-                      const Icon(AppIcons.phone, color: AppColors.primary),
+                  leading: const Icon(AppIcons.phone, color: AppColors.primary),
                   title: Text(l10n.helpContactPhoneLabel),
                   subtitle: const Text('+60 3-1234 5678'),
                 ),
@@ -67,10 +64,7 @@ class HelpCenterScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-            child: Text(
-              l10n.helpOfficeHours,
-              style: tt.bodySmall,
-            ),
+            child: Text(l10n.helpOfficeHours, style: tt.bodySmall),
           ),
         ],
       ),
@@ -93,9 +87,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         title.toUpperCase(),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              letterSpacing: 0.8,
-            ),
+          color: AppColors.onSurfaceVariant,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
@@ -114,10 +108,7 @@ class _FaqItem extends StatelessWidget {
       child: ExpansionTile(
         shape: const Border(),
         leading: const Icon(AppIcons.info, color: AppColors.primary),
-        title: Text(
-          question,
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
+        title: Text(question, style: Theme.of(context).textTheme.titleSmall),
         childrenPadding: const EdgeInsets.fromLTRB(
           AppSpacing.md,
           0,
@@ -128,9 +119,9 @@ class _FaqItem extends StatelessWidget {
         children: [
           Text(
             answer,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.onSurfaceVariant),
           ),
         ],
       ),

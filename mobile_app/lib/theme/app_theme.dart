@@ -58,21 +58,21 @@ abstract final class AppColors {
   // Status
   static const Color success = Color(0xFF15803D); // Green 700
   static const Color warning = Color(0xFFB45309); // Amber 700
-  static const Color error = Color(0xFFDC2626);   // Red 600
+  static const Color error = Color(0xFFDC2626); // Red 600
 
   // Surfaces
-  static const Color surface = Color(0xFFF8FAFC);            // Slate 50
-  static const Color surfaceContainer = Color(0xFFF1F5F9);   // Slate 100
+  static const Color surface = Color(0xFFF8FAFC); // Slate 50
+  static const Color surfaceContainer = Color(0xFFF1F5F9); // Slate 100
   static const Color surfaceContainerHigh = Color(0xFFE2E8F0); // Slate 200
 
   // On-surface text
-  static const Color onSurface = Color(0xFF0F172A);          // Slate 900
-  static const Color onSurfaceVariant = Color(0xFF475569);   // Slate 600
-  static const Color onSurfaceMuted = Color(0xFF94A3B8);     // Slate 400
+  static const Color onSurface = Color(0xFF0F172A); // Slate 900
+  static const Color onSurfaceVariant = Color(0xFF475569); // Slate 600
+  static const Color onSurfaceMuted = Color(0xFF94A3B8); // Slate 400
 
   // Borders
-  static const Color outline = Color(0xFFCBD5E1);            // Slate 300
-  static const Color outlineVariant = Color(0xFFE2E8F0);     // Slate 200
+  static const Color outline = Color(0xFFCBD5E1); // Slate 300
+  static const Color outlineVariant = Color(0xFFE2E8F0); // Slate 200
 
   // Role badge pairs (background / foreground).
   // Named by the displayed role, not by color, for refactor safety.
@@ -80,14 +80,14 @@ abstract final class AppColors {
   static const Color roleBadgePublicFg = Color(0xFF475569);
   static const Color roleBadgeResidentBg = Color(0xFFDCFCE7); // Green 100
   static const Color roleBadgeResidentFg = Color(0xFF15803D); // Green 700
-  static const Color roleBadgePendingBg = Color(0xFFFEF3C7);  // Amber 100
-  static const Color roleBadgePendingFg = Color(0xFFB45309);  // Amber 700
-  static const Color roleBadgeAdminBg = Color(0xFF0F172A);    // Slate 900
+  static const Color roleBadgePendingBg = Color(0xFFFEF3C7); // Amber 100
+  static const Color roleBadgePendingFg = Color(0xFFB45309); // Amber 700
+  static const Color roleBadgeAdminBg = Color(0xFF0F172A); // Slate 900
   static const Color roleBadgeAdminFg = Color(0xFFFFFFFF);
 
   // Demo banner (neutral info strip on shell screens)
-  static const Color demoBannerBg = Color(0xFFEFF6FF);  // Blue 50
-  static const Color demoBannerFg = Color(0xFF1D4ED8);  // Blue 700
+  static const Color demoBannerBg = Color(0xFFEFF6FF); // Blue 50
+  static const Color demoBannerFg = Color(0xFF1D4ED8); // Blue 700
 }
 
 /// Single source of truth for the Material 3 theme.
@@ -97,37 +97,38 @@ abstract final class AppTheme {
     // accessible surface tones. We then pin the primary to Slate 900
     // via copyWith — the institutional feel comes from the override,
     // the generated surface hierarchy from the seed.
-    final cs = ColorScheme.fromSeed(
-      seedColor: AppColors.secondary,
-      brightness: Brightness.light,
-    ).copyWith(
-      primary: AppColors.primary,
-      onPrimary: Colors.white,
-      primaryContainer: AppColors.primaryContainer,
-      onPrimaryContainer: AppColors.primary,
-      secondary: AppColors.secondary,
-      onSecondary: Colors.white,
-      secondaryContainer: AppColors.secondaryContainer,
-      onSecondaryContainer: const Color(0xFF134E4A),
-      tertiary: AppColors.tertiary,
-      onTertiary: Colors.white,
-      tertiaryContainer: AppColors.tertiaryContainer,
-      onTertiaryContainer: const Color(0xFF4C1D95),
-      error: AppColors.error,
-      onError: Colors.white,
-      errorContainer: const Color(0xFFFEE2E2),
-      onErrorContainer: const Color(0xFF7F1D1D),
-      surface: AppColors.surface,
-      onSurface: AppColors.onSurface,
-      onSurfaceVariant: AppColors.onSurfaceVariant,
-      outline: AppColors.outline,
-      outlineVariant: AppColors.outlineVariant,
-      surfaceContainerLowest: Colors.white,
-      surfaceContainerLow: AppColors.surface,
-      surfaceContainer: AppColors.surfaceContainer,
-      surfaceContainerHigh: AppColors.surfaceContainerHigh,
-      surfaceContainerHighest: AppColors.surfaceContainerHigh,
-    );
+    final cs =
+        ColorScheme.fromSeed(
+          seedColor: AppColors.secondary,
+          brightness: Brightness.light,
+        ).copyWith(
+          primary: AppColors.primary,
+          onPrimary: Colors.white,
+          primaryContainer: AppColors.primaryContainer,
+          onPrimaryContainer: AppColors.primary,
+          secondary: AppColors.secondary,
+          onSecondary: Colors.white,
+          secondaryContainer: AppColors.secondaryContainer,
+          onSecondaryContainer: const Color(0xFF134E4A),
+          tertiary: AppColors.tertiary,
+          onTertiary: Colors.white,
+          tertiaryContainer: AppColors.tertiaryContainer,
+          onTertiaryContainer: const Color(0xFF4C1D95),
+          error: AppColors.error,
+          onError: Colors.white,
+          errorContainer: const Color(0xFFFEE2E2),
+          onErrorContainer: const Color(0xFF7F1D1D),
+          surface: AppColors.surface,
+          onSurface: AppColors.onSurface,
+          onSurfaceVariant: AppColors.onSurfaceVariant,
+          outline: AppColors.outline,
+          outlineVariant: AppColors.outlineVariant,
+          surfaceContainerLowest: Colors.white,
+          surfaceContainerLow: AppColors.surface,
+          surfaceContainer: AppColors.surfaceContainer,
+          surfaceContainerHigh: AppColors.surfaceContainerHigh,
+          surfaceContainerHighest: AppColors.surfaceContainerHigh,
+        );
 
     return ThemeData(
       useMaterial3: true,
@@ -139,51 +140,72 @@ abstract final class AppTheme {
       // slightly for the residential-management information density.
       textTheme: const TextTheme(
         headlineLarge: TextStyle(
-          fontSize: 32, fontWeight: FontWeight.w700,
+          fontSize: 32,
+          fontWeight: FontWeight.w700,
           color: AppColors.onSurface,
         ),
         headlineMedium: TextStyle(
-          fontSize: 28, fontWeight: FontWeight.w600,
+          fontSize: 28,
+          fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
         headlineSmall: TextStyle(
-          fontSize: 24, fontWeight: FontWeight.w600,
+          fontSize: 24,
+          fontWeight: FontWeight.w600,
           color: AppColors.onSurface,
         ),
         titleLarge: TextStyle(
-          fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: 0.15,
+          fontSize: 22,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.15,
           color: AppColors.onSurface,
         ),
         titleMedium: TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 0.15,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.15,
           color: AppColors.onSurface,
         ),
         titleSmall: TextStyle(
-          fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.1,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.1,
           color: AppColors.onSurface,
         ),
         bodyLarge: TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w400, letterSpacing: 0.5,
+          fontSize: 16,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.5,
           color: AppColors.onSurface,
         ),
         bodyMedium: TextStyle(
-          fontSize: 14, fontWeight: FontWeight.w400, letterSpacing: 0.25,
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.25,
           color: AppColors.onSurface,
         ),
         bodySmall: TextStyle(
-          fontSize: 12, fontWeight: FontWeight.w400, letterSpacing: 0.4,
+          fontSize: 12,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.4,
           color: AppColors.onSurfaceVariant,
         ),
         labelLarge: TextStyle(
-          fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0.1,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.1,
           color: AppColors.onSurface,
         ),
         labelMedium: TextStyle(
-          fontSize: 12, fontWeight: FontWeight.w500, letterSpacing: 0.5,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
           color: AppColors.onSurface,
         ),
         labelSmall: TextStyle(
-          fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0.5,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
           color: AppColors.onSurfaceVariant,
         ),
       ),
@@ -215,7 +237,9 @@ abstract final class AppTheme {
             vertical: AppSpacing.md,
           ),
           textStyle: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.5,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
           ),
         ),
       ),
@@ -278,7 +302,8 @@ abstract final class AppTheme {
         labelStyle: const TextStyle(color: AppColors.onSurfaceVariant),
         hintStyle: const TextStyle(color: AppColors.onSurfaceMuted),
         floatingLabelStyle: const TextStyle(
-          color: AppColors.primary, fontWeight: FontWeight.w500,
+          color: AppColors.primary,
+          fontWeight: FontWeight.w500,
         ),
       ),
 
@@ -292,8 +317,10 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         shadowColor: AppColors.outlineVariant,
         titleTextStyle: TextStyle(
-          fontSize: 20, fontWeight: FontWeight.w700,
-          color: AppColors.onSurface, letterSpacing: 0,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: AppColors.onSurface,
+          letterSpacing: 0,
         ),
       ),
 
@@ -310,12 +337,14 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w600,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
               color: AppColors.primary,
             );
           }
           return const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w500,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
             color: AppColors.onSurfaceVariant,
           );
         }),
@@ -323,7 +352,10 @@ abstract final class AppTheme {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.primary, size: 24);
           }
-          return const IconThemeData(color: AppColors.onSurfaceVariant, size: 24);
+          return const IconThemeData(
+            color: AppColors.onSurfaceVariant,
+            size: 24,
+          );
         }),
       ),
 
@@ -333,7 +365,8 @@ abstract final class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm, vertical: AppSpacing.xs,
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.xs,
         ),
       ),
 
@@ -346,7 +379,8 @@ abstract final class AppTheme {
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
         titleTextStyle: const TextStyle(
-          fontSize: 20, fontWeight: FontWeight.w700,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
           color: AppColors.onSurface,
         ),
       ),
@@ -372,7 +406,8 @@ abstract final class AppTheme {
       // ── ListTile ───────────────────────────────────────────────────
       listTileTheme: const ListTileThemeData(
         contentPadding: EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.xs,
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
         ),
       ),
     );
